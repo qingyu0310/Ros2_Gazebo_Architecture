@@ -35,6 +35,7 @@ namespace modules::keyboard
  * @brief 认识的那几个键
  *
  * @note kNone 既是"这一拍没按"也是"按了个不认识的键" —— 对遥控来说两者一样：不用改速度
+ * @note kEqual / kMinus 是普通字符（不是方向键那种转义序列）：这一层只认键，怎么用是上层的事
  */
 enum class Key : std::uint8_t
 {
@@ -42,7 +43,9 @@ enum class Key : std::uint8_t
     kUp    = 1,
     kDown  = 2,
     kLeft  = 3,
-    kRight = 4
+    kRight = 4,
+    kEqual = 5,   // '='
+    kMinus = 6    // '-'
 };
 
 /**
@@ -186,6 +189,16 @@ private:
                 if (byte == kEsc)
                 {
                     escape_ = Escape::kAfterEsc;
+                    return Key::kNone;
+                }
+                // 等号/减号是普通字符，不跟着方向键走转义序列那条路
+                if (byte == '=')
+                {
+                    return Key::kEqual;
+                }
+                if (byte == '-')
+                {
+                    return Key::kMinus;
                 }
                 return Key::kNone;
 
@@ -368,8 +381,10 @@ private:
             case Key::kRight:
                 angular_radps_ = -angular_speed_radps_;
                 break;
+            case Key::kEqual:
+            case Key::kMinus:
             case Key::kNone:
-                break;
+                break;   // 这两个键不映射成速度，谁要用谁自己从 Key 里取
         }
     }
 };

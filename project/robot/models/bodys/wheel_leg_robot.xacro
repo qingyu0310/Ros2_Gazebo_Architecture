@@ -4,7 +4,7 @@
 
      坐标系约定（`ros2 run xacro` 或 spawn 的时候按这个来）：
        base_link 原点是整车参考点，摆在**轮轴高度**上 —— 所以两个轮子的关节 z 都是 0，
-       整车 spawn 的 z 就填轮子半径（0.04），两个轮子正好同时贴地。
+       整车 spawn 的 z 就填轮子半径（0.03），两个轮子正好同时贴地。
 
      竖直方向（都是从轮轴那一层往上量）：
        胯轴 / 大腿根 = 2·leg_drop = 72mm（腿在标准姿态下把车身顶到这么高）
@@ -16,9 +16,11 @@
      横向：胯/腿在 y = ±38mm；轮子还要再往外 22mm（外侧 y = ±60mm），
      所以轮子内侧离底盘侧面 5mm，跟四轮车那边一样。
 
-     标准姿态：α = 40°，两条腿都不动 —— 胯关节、膝关节、腿的固定关节现在**全是 fixed**，
-     只有轮子是 continuous（驱动轮，力矩电机插件由 wheel 宏自己挂）。
-     要让它能伸缩，见 modules/leg.xacro 顶上那段（改成 revolute 的位置和取值都写在那儿）。
+     标准姿态：α = 40°（与水平面，也就是文件头说的竖直方向 72mm）。
+     六个运动关节：左右胯、左右膝是 **revolute**（绕 y，力矩入口由 leg 宏挂的 torque_motor 给），
+     左右轮是 continuous（驱动轮）。胯/膝那两个枢轴圆柱只是装饰，仍然是 fixed。
+     腿的符号约定、限位、关节力矩见 modules/leg.xacro 顶上那段；
+     现在还没有腿姿保持器（文档 §8 阶段 2），所以跑起来腿会在自重下折下去。
 
      反馈与 IMU：
        joint_encoder 是**模型级**插件（一个模型挂一次，不是每个关节一次），
@@ -58,7 +60,8 @@
   <xacro:leg name="left_thigh_link"
     joint_name="left_hip_joint"
     parent="base_link"
-    xyz="0 ${leg_y_offset} ${hip_height}"/>
+    xyz="0 ${leg_y_offset} ${hip_height}"
+    lower="${hip_limit_lower}" upper="${hip_limit_upper}"/>
 
   <!-- 膝盖圆柱在大腿远端 -->
   <xacro:knee name="left_knee_link"
@@ -70,7 +73,8 @@
   <xacro:leg name="left_calf_link"
     joint_name="left_knee_joint"
     parent="left_knee_link"
-    direction="-1"/>
+    direction="-1"
+    lower="${knee_limit_lower}" upper="${knee_limit_upper}"/>
 
   <!-- 轮子在小腿远端。y 要再往外挪 (轮距/2 - 腿侧偏)：腿在 38mm、轮子在 60mm -->
   <xacro:wheel name="left_wheel_link"
@@ -87,7 +91,8 @@
   <xacro:leg name="right_thigh_link"
     joint_name="right_hip_joint"
     parent="base_link"
-    xyz="0 ${-leg_y_offset} ${hip_height}"/>
+    xyz="0 ${-leg_y_offset} ${hip_height}"
+    lower="${hip_limit_lower}" upper="${hip_limit_upper}"/>
 
   <xacro:knee name="right_knee_link"
     joint_name="right_knee_cylinder_joint"
@@ -97,7 +102,8 @@
   <xacro:leg name="right_calf_link"
     joint_name="right_knee_joint"
     parent="right_knee_link"
-    direction="-1"/>
+    direction="-1"
+    lower="${knee_limit_lower}" upper="${knee_limit_upper}"/>
 
   <xacro:wheel name="right_wheel_link"
     joint_name="right_wheel_joint"

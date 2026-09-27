@@ -15,6 +15,7 @@
                   parent="base_link" xyz="0 ${leg_y_offset} ${hip_height}"/> -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:include filename="$(find gazebo)/models/basic/cylinder.xacro"/>
+  <xacro:include filename="$(find gazebo)/models/basic/joint.xacro"/>
 
   <xacro:macro name="hip" params="
     name
@@ -35,7 +36,7 @@
       name="${name}"
       radius="${radius}"
       length="${width}"
-      rpy="1.57079632679 0 0"
+      rpy="${90.0 * pi / 180.0} 0 0"
       mass="${mass}"
       ixx="${ixx}"
       iyy="${iyy}"
@@ -43,10 +44,6 @@
       color_name="${color_name}"
       color_rgba="${color_rgba}"/>
 
-    <joint name="${joint_name}" type="fixed">
-      <parent link="${parent}"/>
-      <child link="${name}"/>
-      <origin xyz="${xyz}" rpy="0 0 0"/>
-    </joint>
+    <xacro:fixed_joint name="${joint_name}" parent="${parent}" child="${name}" xyz="${xyz}"/>
   </xacro:macro>
 </robot>

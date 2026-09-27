@@ -1,0 +1,12 @@
+# 键盘遥控参数（ros2 run project keyboard）。节点自己在 install 里找这个文件，不用带 --params-file
+# 改完要 colcon build --packages-select project 才同步到 install
+# 数值一律写小数点（1.0 不能写 1）：整数跟 double 类型对不上，节点启动就抛异常
+
+/keyboard:
+  ros__parameters:
+    cmd_vel_topic: /chassis/cmd_vel
+    publish_period_s: 0.001        # 发 Twist 的周期，跟底盘、电机的 1 kHz 对齐；松手也照发 0
+    key_timeout_s: 0.5             # 这么久没按键就当成松手，速度归零
+    forward_sign: -1.0             # ↑ 键发出去的正负。本车按↑ 往后跑，所以 -1.0
+    turn_sign: 1.0                 # ← 键发出去的正负。按← 车往右转就翻成 -1.0
+    # '=' 发一次 linear.z=+1（长高），'-' 发一次 linear.z=-1（变矮）；每步高度由 chassis.height_step_m 决定

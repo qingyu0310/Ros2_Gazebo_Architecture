@@ -1,0 +1,75 @@
+<?xml version="1.0"?>
+<!-- 关节图元：本项目用到的那三种关节类型，一个类型一个宏。跟 box_link / cylinder_link 是同一层的东西 ——
+     那边管"怎么造一个 link"，这边管"怎么把两个 link 连起来"。装配层（project/robot/models/modules/）
+     不再手写 <joint>，一律走这三个，链接关系和限幅就只有一个地方会写错。
+
+     axis 默认 '0 1 0'：这台车的关节全躺在 y 轴上（都在矢状面里转），腿和轮子都是。
+     要别的方向必须显式传 axis —— 传错不报错，模型会静默地转错方向，力矩符号跟着一起反。
+
+     revolute 和 continuous 的差别只在限位，别的元素一模一样：
+       revolute_joint    有 lower / upper，到限位被物理引擎硬夹断 —— 给胯、膝这种有行程的
+       continuous_joint  没有 lower / upper，本质上就是"不限位的 revolute" —— 给轮子这种要一直转的
+     effort / velocity 两个都必传（不给默认值）：关节没写力矩上限等于没上限，默认成一个小数
+     反而会静默地把关节夹废，不如让 xacro 直接报缺参数。 -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- 固定关节：两个 link 焊死。给枢轴外形那种"只是个外壳、不参与运动"的 link 用 -->
+  <xacro:macro name="fixed_joint" params="
+    name
+    parent
+    child
+    xyz:='0 0 0'
+    rpy:='0 0 0'">
+    <joint name="${name}" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${child}"/>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- 转动关节（带限位）。lower / upper 必传，理由跟 effort / velocity 一样 -->
+  <xacro:macro name="revolute_joint" params="
+    name
+    parent
+    child
+    lower
+    upper
+    effort
+    velocity
+    xyz:='0 0 0'
+    rpy:='0 0 0'
+    axis:='0 1 0'
+    damping:=0.0
+    friction:=0.0">
+    <joint name="${name}" type="revolute">
+      <parent link="${parent}"/>
+      <child link="${child}"/>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <axis xyz="${axis}"/>
+      <limit lower="${lower}" upper="${upper}" effort="${effort}" velocity="${velocity}"/>
+      <dynamics damping="${damping}" friction="${friction}"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- 转动关节（不限位）。effort / velocity 是唯一的硬上限。
+       这里不发 <dynamics>：轮子当前没有被动阻尼，要加（比如把滚动阻力建成模型）就照
+       revolute_joint 的样子补一个 damping 参数 -->
+  <xacro:macro name="continuous_joint" params="
+    name
+    parent
+    child
+    effort
+    velocity
+    xyz:='0 0 0'
+    rpy:='0 0 0'
+    axis:='0 1 0'">
+    <joint name="${name}" type="continuous">
+      <parent link="${parent}"/>
+      <child link="${child}"/>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <axis xyz="${axis}"/>
+      <limit effort="${effort}" velocity="${velocity}"/>
+    </joint>
+  </xacro:macro>
+
+</robot>

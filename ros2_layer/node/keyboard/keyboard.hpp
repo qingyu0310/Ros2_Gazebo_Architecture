@@ -12,6 +12,8 @@
  *       所以这个包做成 INTERFACE 库，不产二进制（见本包 CMakeLists.txt）
  *
  * @note 本节点只发不收：一条 Twist 出去（默认 /chassis/cmd_vel），底盘节点在那边收。
+ *       发的是归一化方向（linear.x / angular.z 取 ±1 或 0），不是 m/s、rad/s —— 多快是底盘的事；
+ *       linear.z 是身高单步脉冲，按 '=' 为 +1、按 '-' 为 -1，其余时间为 0
  *       键盘读的是本进程的 stdin，所以它得在**你自己的终端**里跑，不能塞进 launch 的
  *       后台日志里 —— 没有 tty 的话构造就失败，会直接告诉你
  *
@@ -54,11 +56,12 @@ public:
         cmd_vel_topic_     = declare_parameter("cmd_vel_topic",         "/chassis/cmd_vel");
         publish_period_    = declare_parameter("publish_period_s",      0.001);
         key_timeout_       = declare_parameter("key_timeout_s",         0.5);
-        linear_speed_      = declare_parameter("linear_speed_mps",      0.5);
-        angular_speed_     = declare_parameter("angular_speed_radps",   1.0);
+        forward_sign_      = declare_parameter("forward_sign",          1.0);   // 按前进键、车却后退时翻成 -1.0
+        turn_sign_         = declare_parameter("turn_sign",             1.0);   // 按左转键、车却右转时翻成 -1.0
 
-        teleop_.set_linear_speed(linear_speed_);
-        teleop_.set_angular_speed(angular_speed_);
+        // 只发方向，不走物理量：满量程 1.0，实际多快由底盘乘自己的上限
+        teleop_.set_linear_speed(1.0);
+        teleop_.set_angular_speed(1.0);
         teleop_.set_key_timeout(key_timeout_);
 
         // 终端切不过去就没得玩：早报早好，别让一个收不到键的节点在那儿发 0
@@ -72,7 +75,8 @@ public:
         timer_       = create_wall_timer(std::chrono::duration<double>(publish_period_),
                                          std::bind(&KeyboardNode::update, this));
 
-        RCLCPP_INFO(get_logger(), "键盘就绪：方向键驾驶，松手 %.2f s 后停，Ctrl-C 退出（发到 %s）", key_timeout_, cmd_vel_topic_.c_str());
+        RCLCPP_INFO(get_logger(), "键盘就绪：方向键驾驶，= 长高，- 变矮，松手 %.2f s 后停，Ctrl-C 退出（发到 %s）",
+                    key_timeout_, cmd_vel_topic_.c_str());
     }
 
 private:
@@ -82,8 +86,8 @@ private:
     std::string cmd_vel_topic_;
     double      publish_period_ {0.001};
     double      key_timeout_    {0.7};
-    double      linear_speed_   {1.0};
-    double      angular_speed_  {2.0};
+    double      forward_sign_   {1.0};
+    double      turn_sign_      {1.0};
 
     bool                                  has_key_{false};
     std::chrono::steady_clock::time_point last_key_time_{};
@@ -130,9 +134,18 @@ private:
         tick.key_age_s = key_age_s();
         teleop_.update(tick);
 
+        // 方向约定归这边管：按键对到 Twist 的正负由 forward_sign_ / turn_sign_ 定，下游只照着走
         geometry_msgs::msg::Twist msg;
-        msg.linear.x  = teleop_.output().linear_mps;
-        msg.angular.z = teleop_.output().angular_radps;
+        msg.linear.x  = forward_sign_ * teleop_.output().linear_mps;
+        msg.angular.z = turn_sign_ * teleop_.output().angular_radps;
+        if (tick.key == modules::keyboard::Key::kEqual)
+        {
+            msg.linear.z = 1.0;
+        }
+        else if (tick.key == modules::keyboard::Key::kMinus)
+        {
+            msg.linear.z = -1.0;
+        }
         cmd_vel_pub_->publish(msg);
     }
 };

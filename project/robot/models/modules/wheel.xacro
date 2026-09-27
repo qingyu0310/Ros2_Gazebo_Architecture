@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
-<!-- 轮子：尺寸是定死的 —— 半径 40mm、宽 20mm、0.15kg，跟 lqr 那台整机上的同名轮子一模一样。
+<!-- 轮子：尺寸是定死的 —— 半径 30mm、宽 15mm、0.15kg（宏参数里那两个默认值就是它，body 不覆盖）。
 
      为什么要转 90°：cylinder_link 出来的圆柱默认轴沿 z，轮子的轴得沿 y，
-     所以 visual / inertial / collision 统一 rpy="1.57 0 0" 躺倒，关节也绕 y 转。
+     所以 visual / inertial / collision 统一 rpy="${90.0 * pi / 180.0} 0 0" 躺倒，关节也绕 y 转。
      这样关节正转才是"往前滚"，LQR 那边算出来的力矩符号才对得上。
 
      电机：轮子是驱动轮，默认就把力矩电机插件（gz 的 ApplyJointForce）挂在自己的关节上，
@@ -25,6 +25,7 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:include filename="$(find gazebo)/models/basic/cylinder.xacro"/>
   <xacro:include filename="$(find gazebo)/plugins/motor/torque_motor.xacro"/>
+  <xacro:include filename="$(find gazebo)/models/basic/joint.xacro"/>
 
   <xacro:macro name="wheel" params="
     name
@@ -49,7 +50,7 @@
       name="${name}"
       radius="${radius}"
       length="${width}"
-      rpy="1.57079632679 0 0"
+      rpy="${90.0 * pi / 180.0} 0 0"
       mass="${mass}"
       ixx="${ixx}"
       iyy="${iyy}"
@@ -57,13 +58,8 @@
       color_name="${color_name}"
       color_rgba="${color_rgba}"/>
 
-    <joint name="${joint_name}" type="continuous">
-      <parent link="${parent}"/>
-      <child link="${name}"/>
-      <origin xyz="${xyz}" rpy="0 0 0"/>
-      <axis xyz="0 1 0"/>
-      <limit effort="${effort}" velocity="${velocity}"/>
-    </joint>
+    <xacro:continuous_joint name="${joint_name}" parent="${parent}" child="${name}" xyz="${xyz}"
+                            effort="${effort}" velocity="${velocity}"/>
 
     <!-- 摩擦：必须各向异性，不然车只能直着走、转不了弯。
          四个轮子都是固定轮（没有转向关节），转向靠左右轮速差，那是要四个轮子横着刮地的。

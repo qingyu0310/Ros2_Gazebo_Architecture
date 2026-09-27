@@ -1,92 +1,196 @@
-# 底盘参数：chassis（平衡环）+ 两个电机。要调车的手感，改这里，不用改代码。
-#
-# 分四段，段名就是"给哪个节点"：
-#   /chassis                   平衡环自己的：模型参数、LQR 权重、限幅、遥控接口
-#   /**                        两个电机共用的（通配段，改一处两轮齐变）
-#   /motor_left、/motor_right  只有 max_effort 这一个键要单开段，原因写在那段上面
-#
-# 谁读它：
-#   chassis 节点 —— sim.launch.py 里直接带上（parameters）。两个电机是同一个进程里的子节点，
-#                走的就是下面那个 /** 段（它们的 NodeOptions 没关 use_global_arguments）
-#   键盘遥控不在这个文件里：它在自己的终端里单独跑（ros2 run project keyboard），参数用代码
-#   默认值（ros2_layer/node/keyboard/keyboard.hpp）。要临时改就写在命令行上：
-#     ros2 run project keyboard --ros-args -p linear_speed_mps:=0.3
-#
-# 改完要不要编译：launch 是现读文件，但读的是 install 空间里那份拷贝。
-#   改源码这份之后要 colcon build --packages-select project 才会同步到 install。
-#
-# 数值一律写小数点（1.0 不能写 1）：rclcpp 按 YAML 的类型给参数，写整数会和 double 类型
-# 对不上，节点一启动就抛异常。
-#
-# 这里故意不写的东西：
-#   关节名 / 指令话题 / 力矩话题 —— 那是"这台车怎么接线"，由 chassis 节点统一覆盖给两个电机
-#                                    （见 chassis.hpp），不是手调的量
-#   轮子半径之外的模型尺寸 —— 那些在 robot/models/ 里，跟底盘参数不是一伙的
-#   传感器 / 世界 —— 同上，在 gazebo 层的 xacro 和世界里
+# 底盘参数：chassis（全身 LQR）+ 六个电机。段名就是"给哪个节点"：
+#   /chassis                   全身平衡、六路力矩分配、限幅、遥控接口
+#   /**                        几个电机共用的
+#   /motor_*                   只有 max_effort 要单开段，原因写在那段上面
+# 键盘遥控不在这个文件里：它单独跑（ros2 run project keyboard），参数在 params/keyboard.yaml
+# 改完要 colcon build --packages-select project 才同步到 install，launch 读的是 install 里那份
+# 数值一律写小数点（1.0 不能写 1）：整数跟 double 类型对不上，节点启动就抛异常
 
 /chassis:
   ros__parameters:
-    # ---- 模型参数：由 URDF 量出来（docs/轮腿机器人LQR平衡教程.md §1.3 那段脚本），
-    #      改模型就要重算 —— 这些数对不上不报错，只是站不住 ----
-    wheel_radius: 0.04             # r，跟 modules/wheel.xacro 的 radius 对齐
-    cart_mass: 0.6375              # M = 2*(轮子质量 + 轮子绕轴惯量/r²)
-    body_mass: 1.25                # m = 总质量 1.55 - 两轮 0.30
-    body_com_height: 0.06825       # l = 车身质心到轮轴的距离
-    body_pitch_inertia: 0.002591   # I = 车身绕质心、绕 y 轴的俯仰惯量
-    cart_damping: 0.02             # b 滚阻/粘滞阻尼，估的量，0~0.05 都行
+    # ---- 模型参数：启动时还会对增益的 dt/轮半径/模型哈希做强校验 ----
+    wheel_radius: 0.030                 # r，跟 modules/wheel.xacro 的 radius 对齐
+    cart_mass: 0.9000                   # M = 2*(轮子质量 + 轮子自转惯量/r²) = 2*(0.15 + 0.00027/0.030²)
+    body_mass: 1.25                     # m = 总质量 1.55 - 两轮 0.30
+    body_com_height: 0.06825            # l = 车身质心到轮轴的距离
+    body_pitch_inertia: 0.002591        # I = 车身绕质心、绕 y 轴的俯仰惯量
+    cart_damping: 0.02                  # b 滚阻/粘滞阻尼，估的量，0~0.05 都行
     gravity: 9.81
 
-    # ---- 控制：前五个进 LQR 求解，改完 K 就变了，启动时日志里会把 K 打出来对 ----
-    dt: 0.001                      # 控制周期，要跟 gz 物理步长、定时器实际周期一致
-    q: [500.0, 100.0, 1000.0, 550.0]   # [位移, 速度, 俯仰, 俯仰角速度] 的对角权重，四个都别给 0
-    r: 10.0                         # 单轮力矩的惩罚权重，越大越柔和
-    max_effort: 0.20               # LQR 公共力矩上限 N·m。得让"它 + max_differential"留在单轮附着极限 0.29 以内
-    fall_angle_rad: 0.70           # |俯仰| 超过它（40°）就认定倒地，力矩归零
-    pitch_sign: 1.0                # 俯仰方向反了翻成 -1.0
-    control_sign: 1.0              # 力矩方向反了翻成 -1.0
+    # ---- 控制 ----
+    dt: 0.001                           # 控制周期，要跟 gz 物理步长、定时器实际周期一致
+    max_effort: 0.20                    # LQR 公共力矩上限 N·m，跟转向那三个数是一组的
+    fall_angle_rad: 0.70                # |俯仰| 超过它（40°）就认定倒地，力矩归零
+    wheel_effort_rate_limit: 100.0      # 单轮力矩变化率 N·m/s；1 ms 一拍最多变化 0.10 N·m
+
+    # ---- 高度增益调度：每份都由同一 URDF 在对应腿高工作点重新线性化并通过 21 项检查 ----
+    # 文件名相对 gains/wheel_leg/；运行时在相邻高度间线性插值 K、X0、U0 和 roll_per_q。
+    gain_files: [height_058.yaml, nominal.yaml, height_080.yaml,
+                 height_090.yaml, height_100.yaml, height_104.yaml]
+
+    # ---- 安全监督：任一路反馈停更立即清零，恢复后持续健康一段时间才重新接管 ----
+    feedback_timeout_s: 0.10
+    max_control_period_s: 0.02
+    recovery_dwell_s: 0.20
+
+    # ---- 执行器消融开关：正常运行全开，只在阶段 3/4 验收时单独关闭一类 ----
+    enable_wheel_common: true
+    enable_hip_common: true
+    enable_knee_common: true
+    enable_hip_diff: true
+    enable_knee_diff: true
+
+    # ---- 对称调高：运行中可直接改 target_height_m，不依赖键盘节点 ----
+    # 固定增益仍是在零位高度线性化的；height_rate_mps 把目标变成缓坡，避免一步跳变冲击平衡环。
+    leg_length: 0.056                    # 单根连杆长度 m，必须与 modules/leg.xacro 一致
+    leg_angle: 0.6981317008              # 零位时连杆与水平面的夹角 rad（40°）
+    target_height_m: 0.0719922123        # 髋轴到轮轴的目标竖直距离 m；当前软限位约束下可达范围启动时打印
+    height_rate_mps: 0.01                # 高度目标最大变化速度 m/s；调小更稳，调大响应更快
+    leg_rod_mass: 0.03                   # 单根腿杆质量 kg，用于随高度更新静态重力前馈
+    leg_joint_mass: 0.005                # 单个膝部关节块质量 kg
+    wheel_mass: 0.15                     # 单轮质量 kg
+
+    # ---- Q/R 只给离线 generate_wheel_leg_lqr 生成增益用。运行时 chassis 直接读
+    #      gains/wheel_leg/nominal.yaml 的 K/X0/U0，不在节点内重新求解 ----
+    q_pitch: [700.0, 200.0, 1000.0, 550.0, 300.0, 30.0, 300.0, 30.0]    # [s, ṡ, pitch, θ̇, q_h+, q̇_h+, q_k+, q̇_k+]
+    r_pitch: [1.0, 2.0, 2.0]                                            # [tau_w+, tau_h+, tau_k+]，调小就更爱用那一路
+    q_roll: [800.0, 60.0, 400.0, 40.0, 400.0, 40.0]                     # [roll, φ̇, q_h-, q̇_h-, q_k-, q̇_k-]
+    r_roll: [2.0, 2.0]                                                  # [tau_h-, tau_k-]
+    pitch_sign: 1.0                     # 俯仰方向反了翻成 -1.0
+    control_sign: 1.0                   # 力矩方向反了翻成 -1.0
 
     # ---- 遥控接口：键盘（ros2 run project keyboard）往 cmd_vel_topic 发 Twist ----
     cmd_vel_topic: /chassis/cmd_vel
-    max_velocity: 1.00             # 前后速度上限 m/s
-    linear_sign: -1.0              # 键盘按前进、车却往后跑时翻成 -1.0（只翻目标值，平衡环不动）
-    max_yaw_rate: 1.0              # 偏航角速度上限 rad/s
-    yaw_kp: 0.08                   # 偏航角速度误差 -> 左右轮力矩差，N·m·s/rad。要够到 max_differential
-    max_differential: 0.08         # 力矩差上限 N·m。撬动侧向摩擦起码要 0.029（见下面那段注释）
-    yaw_sign: 1.0                  # 转向方向反了翻成 -1.0
-    command_timeout_s: 0.30        # 这么久没收到 cmd_vel 就当停车，断了不会一直冲
-    # 转向这三个数（yaw_kp / max_differential / max_effort）是一组的，别单改一个：
-    #   差速给的偏航力矩 = d·t/r，侧向摩擦顶住的 = mu_lateral·N_total·t/2，
-    #   一比**轮距约掉**：可用/需要 = 2d/(mu_lateral·N_total·r) —— 加宽轮距、加大 max_effort 都没用。
-    #   按本车的数（t 0.044、1.49 kg、r 0.04、mu_lateral 0.1）门槛是
-    #     d > mu_lateral·N_total·r/2 ≈ 0.029 N·m
-    #   四轮那台用 0.02 够，是因为两个轴、力矩翻倍；两轮正好砍一半，所以这里得给到 0.08。
-    #   yaw_kp 要能在满误差（max_yaw_rate）附近够到 max_differential，0.08 对应 1.0 rad/s
-    #   而 max_effort 得让开：max_effort + max_differential ≤ mu_rolling·(总重/2)·r ≈ 0.29，
-    #   超了那一侧轮子会打滑
+    max_velocity: 0.30                  # 前后速度上限 m/s
+    max_yaw_rate: 1.0                   # 偏航角速度上限 rad/s
+    height_step_m: 0.001                # 每收到一次 = / - 按键脉冲，目标高度增加/减少 1 mm
+    yaw_kp: 0.08                        # 偏航角速度误差 -> 左右轮力矩差，N·m·s/rad
+    max_differential: 0.08              # 力矩差上限 N·m，见下面转向那段
+    command_timeout_s: 0.30             # 这么久没收到 cmd_vel 就当停车，断了不会一直冲
+
+    # ---- 髋膝：四个腿关节，每个数组都按 [左髋, 右髋, 左膝, 右膝] 对齐。
+    #      chassis 把髋/膝共模力矩拆回左右后直接发往这四条话题 ----
+    leg_joint_names: [left_hip_joint, right_hip_joint, left_knee_joint, right_knee_joint]
+    leg_command_topics: [/motor/left_hip/command, /motor/right_hip/command,
+                         /motor/left_knee/command, /motor/right_knee/command]
+    leg_max_effort: [1.5, 1.5, 1.5, 1.5]              # 单关节力矩上限 N·m，抄 lqr 那台的 leg_effort
+    leg_max_speed_radps: [6.0, 6.0, 6.0, 6.0]         # 关节速度上限 rad/s
+    leg_limit_lower: [-0.2618, -0.2618, -1.1345, -1.1345]   # 髋 -15°、膝 -65°，硬限位
+    leg_limit_upper: [0.6109, 0.6109, 0.4363, 0.4363]       # 髋 +35°、膝 +25°
+    leg_joint_sign: [1.0, 1.0, 1.0, 1.0]              # 正方向反了翻成 -1.0，等 §8 阶段 0 把六个关节正方向确认完再定
+    leg_effort_rate_limit: [500.0, 500.0, 500.0, 500.0]     # N·m/s；1 ms 一拍最多变化 0.5 N·m
+    leg_soft_limit_margin: [0.10, 0.10, 0.10, 0.10]         # 软限位相对硬限位向内收 0.10 rad
+    leg_soft_limit_kp: [2.0, 2.0, 2.0, 2.0]                 # 越过软限位后的恢复刚度 N·m/rad
+    leg_soft_limit_kd: [0.05, 0.05, 0.05, 0.05]             # 恢复阻尼 N·m·s/rad
 
     # ---- 反馈话题与模式 ----
     imu_topic: /imu
     joint_states_topic: /joint_states
     control_mode: effort           # 必须是 effort：中间插一层速度环会和平衡环对着干
 
-# 两个电机共用的这一段。里面只有电机节点会声明的键，别的节点拿到当没看见。
-# 别往这里塞底盘也声明的键（joint_states_topic / max_effort 那种）：段名是当正则匹配的，
-# /** 会连 chassis 节点一起命中，而两段都命中时**靠后的段覆盖靠前的**（按文件里的先后排，
-# 没有"精确段优先"这回事）—— 写了就等于把底盘那份悄悄顶掉。
-#   joint_states_topic 不写：电机的那个值由底盘覆盖进来（要跟底盘订同一路），写了也不生效
-#   speed_kp / speed_ki 不写：只在 speed 模式下有用，而平衡环必须是 effort，用代码默认值
+# 六个电机共用的这一段。段名是当正则匹配的：/** 会连 chassis 一起命中，而且**靠后的段覆盖靠前的**
+# （没有"精确段优先"这回事）—— 底盘也声明的键（joint_states_topic / max_effort）一个字都别写进来。
+# 只给轮子成立的键（比如 60 rad/s 这档转速）必须能在腿那几段里被覆盖掉，见下面 /motor_left_hip
 /**:
   ros__parameters:
-    max_speed_radps: 60.0          # 单轮转速上限 rad/s（轮径 0.04 → 2.4 m/s）。力矩模式下只是护栏
+    max_speed_radps: 60.0          # 单轮转速上限 rad/s（轮径 0.030 → 1.8 m/s）。力矩模式下只是护栏
     effort_timeout_s: 0.05         # 这么久没收到指令就把力矩清零（平衡环 1 kHz 在发，够用）
 
-# max_effort 是唯一一个"底盘和电机都声明、含义还不一样"的键：底盘的是 LQR 公共力矩上限
-# （0.25），电机的是单轮上限（5.0）。放进 /** 会把底盘那份顶成 5.0，而附着极限才 0.30 ——
-# 表现是轮子空转、车瞬间躺下。所以拆成两个显式段，谁也不挨着谁
+# max_effort 两边含义不一样：底盘的是 LQR 公共力矩上限（0.20），电机的是单执行器上限（轮 5.0、腿 1.5）。
+# 放进 /** 会把底盘那份顶成 5.0，而附着极限才 0.30 —— 表现是轮子空转、车瞬间躺下，所以拆成显式段。
+# 接线（关节名 / 三个话题）也只能写在各自的段里：底盘节点不再往电机里塞了
 /motor_left:
   ros__parameters:
-    max_effort: 5.0                # 单轮力矩上限 N·m，必须 >= 底盘的 max_effort + max_differential
+    joint_name: left_wheel_joint
+    command_topic: /motor/left/command   # 底盘发力矩的话题
+    force_topic: /motor/left/cmd_force   # 桥到 gz 的 cmd_force，见 sim.launch.py
+    joint_states_topic: /joint_states
+    control_mode: effort                 # 跟底盘一致：中间插速度环会和平衡环对着干
+    max_effort: 5.0                      # 单轮力矩上限 N·m，必须 >= 底盘的 max_effort + max_differential
 
 /motor_right:
   ros__parameters:
+    joint_name: right_wheel_joint
+    command_topic: /motor/right/command
+    force_topic: /motor/right/cmd_force
+    joint_states_topic: /joint_states
+    control_mode: effort
     max_effort: 5.0
+
+# 四个腿关节：力矩上限 1.5 N·m、转速上限 6.0 rad/s，都是模型的关节硬限位（modules/leg.xacro）。
+# 转速必须显式写：不写就吃到 /** 的 60.0，那是给轮子的，对腿没有意义
+/motor_left_hip:
+  ros__parameters:
+    joint_name: left_hip_joint
+    command_topic: /motor/left_hip/command
+    force_topic: /motor/left_hip/cmd_force
+    joint_states_topic: /joint_states
+    control_mode: effort
+    max_effort: 1.5
+    max_speed_radps: 6.0
+
+/motor_right_hip:
+  ros__parameters:
+    joint_name: right_hip_joint
+    command_topic: /motor/right_hip/command
+    force_topic: /motor/right_hip/cmd_force
+    joint_states_topic: /joint_states
+    control_mode: effort
+    max_effort: 1.5
+    max_speed_radps: 6.0
+
+/motor_left_knee:
+  ros__parameters:
+    joint_name: left_knee_joint
+    command_topic: /motor/left_knee/command
+    force_topic: /motor/left_knee/cmd_force
+    joint_states_topic: /joint_states
+    control_mode: effort
+    max_effort: 1.5
+    max_speed_radps: 6.0
+
+/motor_right_knee:
+  ros__parameters:
+    joint_name: right_knee_joint
+    command_topic: /motor/right_knee/command
+    force_topic: /motor/right_knee/cmd_force
+    joint_states_topic: /joint_states
+    control_mode: effort
+    max_effort: 1.5
+    max_speed_radps: 6.0
+
+# 腿姿保持器（文档 §8 阶段 2）：静态重力前馈 U0 + 关节 PD，把四个腿关节顶在标准姿态上。
+# 临时基线 —— 只解决"腿在自重下折下去"，车身的平衡还是 /chassis 那条环；阶段 3 上来就换掉。
+# 它管的话题跟 /chassis 是两拨：这边四条 /motor/<关节>/command，那边两条 /motor/<轮子>/command
+/leg:
+  ros__parameters:
+    dt: 0.001                           # 1 kHz，跟平衡环、gz 物理步长一个节奏
+    joint_states_topic: /joint_states
+
+    # 关节接线：顺序 [左髋, 右髋, 左膝, 右膝]，跟上面 /chassis 段的 leg_joint_names /
+    # leg_command_topics 是同一份东西，改一处要跟着改另一处
+    joint_names: [left_hip_joint, right_hip_joint, left_knee_joint, right_knee_joint]
+    command_topics: [/motor/left_hip/command, /motor/right_hip/command,
+                     /motor/left_knee/command, /motor/right_knee/command]
+
+    # ---- 腿几何与质量：算前馈 U0 用，跟 modules/leg.xacro、modules/wheel.xacro 一份数；
+    #      body_mass 跟 /chassis 段那个同源。模型改了这里要跟着改，对不上只是腿会歪 ----
+    leg_length: 0.056                   # L，单根连杆长
+    leg_angle: 0.6981317008             # 40°，与水平面的夹角
+    body_mass: 1.25                     # 除两个轮子外的整车质量（含四根连杆和膝上圆柱）
+    rod_mass: 0.03                      # 单根连杆
+    joint_mass: 0.005                   # 膝上的关节圆柱
+    wheel_mass: 0.15
+    gravity: 9.81
+
+    # ---- 目标腿姿：仅供退役的 leg 调试节点；正常仿真由 chassis 的 target_height_m 接管 ----
+    target_hip_rad: 0.0
+    target_knee_rad: 0.0
+
+    # ---- PD 与限幅：kp/kd 起步值抄 lqr 那台的 leg 节点（同一个模型），力给到静态需求
+    #      （标准姿态膝约 0.26 N·m）的三倍多，电机那层还有 1.5 的硬限位 ----
+    kp: 2.0                             # N·m/rad
+    kd: 0.05                            # N·m·s/rad
+    max_effort: 1.0                     # 单关节出力上限 N·m
+    joint_sign: [1.0, 1.0, 1.0, 1.0]    # 正方向反了翻成 -1.0，顺序同上
+    feedback_timeout_s: 0.10            # 这么久没收到 /joint_states 就归零

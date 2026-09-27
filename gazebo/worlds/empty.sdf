@@ -33,7 +33,7 @@
       <direction>-0.5 0.1 -0.9</direction>
     </light>
 
-    <!-- 地面：车 spawn 在 z=0.04（轮子半径），四个轮子靠它托着 -->
+    <!-- 地面：车 spawn 在 z=0.03（轮子半径），四个轮子靠它托着 -->
     <model name="ground_plane">
       <static>true</static>
       <link name="link">
@@ -55,6 +55,92 @@
           <material>
             <ambient>1 1 1 1</ambient>
             <diffuse>1 1 1 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 梯形障碍：爬坡/越障测试用。静态，三条盒子拼出来（顶面平台 + 两段斜坡）。
+         尺寸的来路：
+           车高 = 轮轴离地 30 + 底盘底面到轮轴 57 + 板厚 30 = 117 mm
+           梯形高取车高的一半 ≈ 60 mm
+           坡度 15°（缓），所以每段斜坡的水平投影 = 60 / tan15° = 224 mm
+           顶面长 300 mm、宽 500 mm（比轮距 120 宽得多，绕不过去，只能上）
+         斜坡用一个转过 15° 的盒子：摆成它的**上表面**正好是那条斜线，盒子下半截埋在地里。
+         放哪：模型原点在 x = 0.75，斜坡从 x ≈ 0.38 开始，车起步后有一段平地可以摆正车身。
+         摩擦不写：gz 默认 mu = 1.0，跟地面一样；爬 15° 需要的 mu 只有 tan15° = 0.27 -->
+    <model name="trapezoid">
+      <static>true</static>
+      <pose>0.75 0 0 0 0 0</pose>
+
+      <!-- 顶面平台：60 mm 高，底面落在地面上 -->
+      <link name="platform">
+        <pose>0 0 0.03 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.30 0.50 0.06</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.30 0.50 0.06</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.55 0.55 0.6 1</ambient>
+            <diffuse>0.55 0.55 0.6 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- 上坡段（−x 侧，往 +x 爬）：长 232 mm（沿斜面）、厚 120 mm 埋一半 -->
+      <link name="ramp_up">
+        <pose>-0.24650 0 -0.02790 0 -0.26180 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.23189 0.50 0.12</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.23189 0.50 0.12</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.55 0.55 0.6 1</ambient>
+            <diffuse>0.55 0.55 0.6 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- 下坡段（+x 侧）：镜像 -->
+      <link name="ramp_down">
+        <pose>0.24650 0 -0.02790 0 0.26180 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.23189 0.50 0.12</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.23189 0.50 0.12</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.55 0.55 0.6 1</ambient>
+            <diffuse>0.55 0.55 0.6 1</diffuse>
             <specular>0.1 0.1 0.1 1</specular>
           </material>
         </visual>

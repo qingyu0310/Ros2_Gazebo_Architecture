@@ -6,6 +6,11 @@ find_package(ament_cmake REQUIRED)
 find_package(framework REQUIRED)
 # ros2_layer 的通用节点（ImuNode 等）从这里来
 find_package(ros2_layer REQUIRED)
+# 键盘节点用它找 share/project/params/keyboard.yaml
+find_package(ament_index_cpp REQUIRED)
+# 离线工具（generate_wheel_leg_lqr）读展开的 URDF 用它
+find_package(tinyxml2_vendor REQUIRED)
+find_package(yaml_cpp_vendor REQUIRED)
 
 # 节点可执行目标加在这里（node/ 是源码，不进 install）：
 #   add_executable(<node> node/<方向>/<文件>.cpp)
@@ -19,17 +24,42 @@ add_executable(imu node/imu/imu.cpp)
 target_link_libraries(imu ros2_layer::ros2_layer)
 install(TARGETS imu DESTINATION lib/${PROJECT_NAME})
 
-# 底盘：一个进程里三个节点（chassis + 两个电机），电机由底盘一起 spin
+# 底盘：只管解算，算完把两个轮子的力矩发到话题上
 add_executable(chassis node/chassis/chassis.cpp)
-target_link_libraries(chassis ros2_layer::ros2_layer)
+target_link_libraries(chassis ros2_layer::ros2_layer ament_index_cpp::ament_index_cpp yaml-cpp)
 install(TARGETS chassis DESTINATION lib/${PROJECT_NAME})
+
+# 电机：两个轮子各一个 MotorNode，跟底盘分开进程。以后髋、膝加进来也起在这个进程里
+add_executable(motor node/motor/motor.cpp)
+target_link_libraries(motor ros2_layer::ros2_layer)
+install(TARGETS motor DESTINATION lib/${PROJECT_NAME})
+
+# 腿姿保持器保留为阶段 2 单独调试工具；正常 sim.launch.py 不再启动它
+add_executable(leg node/leg/leg.cpp)
+target_link_libraries(leg ros2_layer::ros2_layer)
+install(TARGETS leg DESTINATION lib/${PROJECT_NAME})
+
+# 离线工具：从展开的 URDF 建平面共模模型，线性化 A/B，解 K，写 gains/ 下的增益文件。
+# 不在仿真链路上，跑一次生成一次；读 URDF 用 tinyxml2（ros2 自带）
+add_executable(generate_wheel_leg_lqr tools/generate_wheel_leg_lqr.cpp)
+target_link_libraries(generate_wheel_leg_lqr framework::framework tinyxml2::tinyxml2)
+install(TARGETS generate_wheel_leg_lqr DESTINATION lib/${PROJECT_NAME})
 
 # 键盘遥控：读终端方向键，往底盘的 cmd_vel 发 Twist。要自己在有终端的窗口里前台跑
 add_executable(keyboard node/keyboard/keyboard.cpp)
-target_link_libraries(keyboard ros2_layer::ros2_layer)
+target_link_libraries(keyboard ros2_layer::ros2_layer ament_index_cpp::ament_index_cpp)
 install(TARGETS keyboard DESTINATION lib/${PROJECT_NAME})
 
-install(DIRECTORY launch params robot
+install(DIRECTORY launch params robot gains
     DESTINATION share/${PROJECT_NAME})
+
+if(BUILD_TESTING)
+    find_package(ament_cmake_gtest REQUIRED)
+    ament_add_gtest(test_torque_allocator test/test_torque_allocator.cpp)
+    target_include_directories(test_torque_allocator PRIVATE node/chassis)
+
+    ament_add_gtest(test_leg_height test/test_leg_height.cpp)
+    target_include_directories(test_leg_height PRIVATE node/chassis)
+endif()
 
 ament_package()
