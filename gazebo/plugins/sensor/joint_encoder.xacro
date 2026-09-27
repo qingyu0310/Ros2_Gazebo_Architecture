@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<!-- 关节编码器：读侧的东西，不是电机。往 URDF 里挂 gz-sim 自带的 JointStatePublisher，
+     把仿真里每个关节的 position / velocity / force 报出来。
+     两个 motor 宏是"你写仿真"，它是"仿真写给你"，方向正好相反。
+
+     它是什么：
+       仿真里的关节编码器。它不认电机，只认关节 —— 有电机的关节在里面，
+       没电机的关节也在里面，固定关节也在（值为 0）。
+
+     挂几次（本文件最容易踩的地方）：
+       每个模型 include 一次，不是每个关节一次。一个插件实例就会把模型下的关节
+       打包成一条消息发出去；按"每个关节 include 一次"的习惯写两遍，就会在同一条
+       话题上起两个发布者，不报错，只是重复/交错发布。
+       宏层面检测不出"被 include 两次"，所以这里给了 joint_names 参数，让一次调用
+       就能点名多个关节 —— 别靠多次 include 来挑关节。
+       它只会报直接挂在模型下的关节，嵌套模型里的不算。
+
+     话题与数据：
+       话题默认覆盖成全局的 /joint_states，正是 robot_state_publisher 订阅的那个
+       名字，接上就能出 TF。但它是全局固定名：一个 world 里两个模型各挂一次就会
+       混成一条流，关节名还会撞，那种场景要自己传 topic。
+       插件发出的 gz.msgs.Model 里本来有模型名、关节限幅、damping、轴向量、父子
+       link 名，但过桥成 sensor_msgs/JointState 后只剩 name / position / velocity /
+       effort 四个数组，其余全丢 —— 想要模型位姿得另开一路
+       （gz.msgs.Pose -> nav_msgs/Odometry）。
+
+     时序：
+       update_rate 是节流上限，不是保证值，按仿真时间算。消息 stamp 也是仿真时间，
+       用它的节点要 use_sim_time=true，否则时间轴对不上。
+
+     名字与内容有一点出入：
+       叫编码器，但 effort 那一路超出了真机编码器能给的 —— 它读的是 gz 的
+       JointForce 组件（不是把你发的力矩命令回读），相当于顺带带了个关节力反馈。
+
+     用法：
+       <xacro:joint_encoder/>                                      报模型下所有关节
+       <xacro:joint_encoder joint_names="left_wheel_joint right_wheel_joint"/>
+       <xacro:joint_encoder topic="/robot1/joint_states"/>          多模型时分开话题 -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- 内部辅助宏：把空格分隔的关节名列表展开成多个 <joint_name> 元素。
+       xacro 没有 for / foreach（内置标签只有 if / unless / macro / property /
+       element / attribute / insert_block / include / arg），所以只能递归自己转。
+       不要从别处 include 这个宏，它是给下面那个用的。 -->
+  <xacro:macro name="joint_encoder_joint_names" params="names">
+    <xacro:if value="${len(names.strip()) > 0}">
+      <joint_name>${names.split()[0]}</joint_name>
+      <xacro:joint_encoder_joint_names names="${' '.join(names.split()[1:])}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <xacro:macro name="joint_encoder" params="topic:=/joint_states update_rate:=1000.0 joint_names:=''">
+    <gazebo>
+      <!-- filename 是插件库名，name 是 gz 的完整类名 -->
+      <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
+        <topic>${topic}</topic>
+        <update_rate>${update_rate}</update_rate>
+        <!-- joint_names 留空 = 不生成任何 joint_name，插件就报模型下所有关节；
+             给了列表 = 只报列表里这些，空格分隔 -->
+        <xacro:joint_encoder_joint_names names="${joint_names}"/>
+      </plugin>
+    </gazebo>
+  </xacro:macro>
+</robot>

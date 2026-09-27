@@ -1,0 +1,114 @@
+<?xml version="1.0"?>
+<!-- 轮腿机器人：底盘 + 两条腿。每条腿 = 胯圆柱 + 大腿 + 膝盖圆柱 + 小腿，末端挂一个轮子。
+     零件尺寸都在 modules/ 那五个宏里，这里只管摆位。
+
+     坐标系约定（`ros2 run xacro` 或 spawn 的时候按这个来）：
+       base_link 原点是整车参考点，摆在**轮轴高度**上 —— 所以两个轮子的关节 z 都是 0，
+       整车 spawn 的 z 就填轮子半径（0.04），两个轮子正好同时贴地。
+
+     竖直方向（都是从轮轴那一层往上量）：
+       胯轴 / 大腿根 = 2·leg_drop = 72mm（腿在标准姿态下把车身顶到这么高）
+       底盘安装面 = 胯轴 - 15mm = 57mm，也就是胯轴落在板的中面上 ——
+         底盘宏只认"底面放在哪"，所以这半个板厚得在这儿写成 chassis_mount_z，
+         跟 lqr 那台的相对关系一致（那边的底盘中心就摆在胯轴高度上）
+       IMU = 胯轴 + 20mm = 92mm，也跟 lqr 一致
+
+     横向：胯/腿在 y = ±38mm；轮子还要再往外 22mm（外侧 y = ±60mm），
+     所以轮子内侧离底盘侧面 5mm，跟四轮车那边一样。
+
+     标准姿态：α = 40°，两条腿都不动 —— 胯关节、膝关节、腿的固定关节现在**全是 fixed**，
+     只有轮子是 continuous（驱动轮，力矩电机插件由 wheel 宏自己挂）。
+     要让它能伸缩，见 modules/leg.xacro 顶上那段（改成 revolute 的位置和取值都写在那儿）。
+
+     反馈与 IMU：
+       joint_encoder 是**模型级**插件（一个模型挂一次，不是每个关节一次），
+       轮速环吃它发的 /joint_states —— 没有它车不动
+       IMU 挂 base_link、话题 /imu、1000 Hz，跟四轮车同一个宏同一套默认值
+
+     改之前先看牵连：胯圆柱和它那条大腿必须装在同一个点（xyz 一模一样）；
+     膝盖圆柱装在大腿远端，小腿又挂在膝圆柱原点上，这两处跟着 leg_span / leg_drop 走；
+     轮子的关节原点相对小腿，末端落在胯轴正下方 —— 三条腿的闭合靠的是
+     leg_span / leg_drop 在两个方向上互相抵消，所以别单独改其中一个数。 -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="wheel_leg_robot">
+
+  <xacro:include filename="$(find project)/robot/models/modules/chassis.xacro"/>
+  <xacro:include filename="$(find project)/robot/models/modules/leg.xacro"/>
+  <xacro:include filename="$(find project)/robot/models/modules/knee.xacro"/>
+  <xacro:include filename="$(find project)/robot/models/modules/hip.xacro"/>
+  <xacro:include filename="$(find project)/robot/models/modules/wheel.xacro"/>
+  <xacro:include filename="$(find gazebo)/plugins/sensor/joint_encoder.xacro"/>
+  <xacro:include filename="$(find gazebo)/plugins/sensor/imu.xacro"/>
+
+  <!-- 这里只有"零件之间的距离"。leg_span / leg_drop 是 leg 宏自己按杆长和角度算出来的 -->
+  <xacro:property name="wheel_y_offset"   value="0.06"/>               <!-- 轮距/2 -->
+  <xacro:property name="leg_y_offset"     value="0.038"/>              <!-- 胯/腿的侧偏 -->
+  <xacro:property name="hip_height"       value="${2 * leg_drop}"/>    <!-- 胯轴相对轮轴 -->
+  <xacro:property name="chassis_mount_z"  value="${hip_height - 0.015}"/>  <!-- 底盘底面 -->
+  <xacro:property name="imu_z"            value="${hip_height + 0.02}"/>
+
+  <!-- 底盘：底面落在胯轴下方 15mm（半个板厚），胯轴正好在板的中面上 -->
+  <xacro:chassis name="base_link" xyz="0 0 ${chassis_mount_z}"/>
+
+  <!-- 左腿：胯圆柱和大腿同点（都在胯轴上），所以两行的 xyz 一样 -->
+  <xacro:hip name="left_hip_link"
+    joint_name="left_hip_cylinder_joint"
+    parent="base_link"
+    xyz="0 ${leg_y_offset} ${hip_height}"/>
+
+  <xacro:leg name="left_thigh_link"
+    joint_name="left_hip_joint"
+    parent="base_link"
+    xyz="0 ${leg_y_offset} ${hip_height}"/>
+
+  <!-- 膝盖圆柱在大腿远端 -->
+  <xacro:knee name="left_knee_link"
+    joint_name="left_knee_cylinder_joint"
+    parent="left_thigh_link"
+    xyz="${leg_span} 0 ${-leg_drop}"/>
+
+  <!-- 小腿挂在膝圆柱原点上（膝轴），往后下方张开 -->
+  <xacro:leg name="left_calf_link"
+    joint_name="left_knee_joint"
+    parent="left_knee_link"
+    direction="-1"/>
+
+  <!-- 轮子在小腿远端。y 要再往外挪 (轮距/2 - 腿侧偏)：腿在 38mm、轮子在 60mm -->
+  <xacro:wheel name="left_wheel_link"
+    joint_name="left_wheel_joint"
+    parent="left_calf_link"
+    xyz="${-leg_span} ${wheel_y_offset - leg_y_offset} ${-leg_drop}"/>
+
+  <!-- 右腿：跟左腿逐行对称，只有 y 的符号反过来 -->
+  <xacro:hip name="right_hip_link"
+    joint_name="right_hip_cylinder_joint"
+    parent="base_link"
+    xyz="0 ${-leg_y_offset} ${hip_height}"/>
+
+  <xacro:leg name="right_thigh_link"
+    joint_name="right_hip_joint"
+    parent="base_link"
+    xyz="0 ${-leg_y_offset} ${hip_height}"/>
+
+  <xacro:knee name="right_knee_link"
+    joint_name="right_knee_cylinder_joint"
+    parent="right_thigh_link"
+    xyz="${leg_span} 0 ${-leg_drop}"/>
+
+  <xacro:leg name="right_calf_link"
+    joint_name="right_knee_joint"
+    parent="right_knee_link"
+    direction="-1"/>
+
+  <xacro:wheel name="right_wheel_link"
+    joint_name="right_wheel_joint"
+    parent="right_calf_link"
+    xyz="${-leg_span} ${leg_y_offset - wheel_y_offset} ${-leg_drop}"/>
+
+  <!-- 关节状态反馈：整机挂一次（不是每个关节一次）。默认就是 /joint_states、1000 Hz -->
+  <xacro:joint_encoder/>
+
+  <!-- IMU：挂在底盘上，位置比胯轴高 20mm。名字和话题都用默认：imu_sensor / /imu，
+       跟 imu 节点的 raw_topic 默认值对上 -->
+  <xacro:imu_sensor reference_link="base_link" pose="0 0 ${imu_z} 0 0 0"/>
+
+</robot>

@@ -1,0 +1,27 @@
+{
+    "editor.insertSpaces": true,
+    "editor.tabSize": 4,
+    "editor.detectIndentation": false,
+    "[yaml]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 4,
+        "editor.detectIndentation": false
+    },
+    "clangd.arguments": [
+        "--compile-commands-dir=${workspaceFolder}/build"
+    ],
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.configureSettings": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+    },
+    "cmake.ignoreCMakeListsMissing": true,
+
+    "workbench.tree.indent": 12,
+    "workbench.tree.renderIndentGuides": "always",
+    "explorer.compactFolders": false,
+    "explorer.enableUndo": false,
+
+    "workbench.colorCustomizations": {
+        "tree.indentGuidesStroke": "#00ff73"
+    },
+}

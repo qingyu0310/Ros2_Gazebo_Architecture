@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<!-- 速度电机：往 URDF 里挂 gz-sim 自带的 JointController，为该关节开一个"目标速度"入口，
+     Gazebo 内部把关节驱动到目标值。
+
+     它是什么：
+       同样是执行器接口，不是电机模型（没有 Kt、反电动势、电流环、力矩-转速曲线）。
+       它跟 torque_motor 用的 ApplyJointForce 是两条互斥路线：这个把闭环放进仿真
+       （你只给目标值），torque_motor 把闭环放在你自己的节点里（你给力矩）。
+
+     两种身份，由 use_force_commands 决定 —— 这是本文件最容易踩的地方：
+       true  ：跑一个 PID，比"当前速度 vs 目标速度"，把 PID 输出当力矩施加到关节。
+               此时下面那组 p_gain / i_gain / d_gain / i_max / i_min / cmd_max / cmd_min 才生效。
+       false ：不做任何控制，直接把关节速度置成目标值（运动学覆盖，绕过动力学）。
+               上面那组增益参数全是摆设，一个都不生效 —— gz-sim 文档把它们标为
+               "Force mode only"，并注明 "Velocity mode needs no extra parameters"。
+       本宏的默认值就是 false。
+
+     对本项目：
+       走的是 LQR + torque_motor 的力矩路线，所以默认参数下的这个宏不该被 include。
+       真要用它做仿真内的闭环，必须显式传 use_force_commands:='true'。
+
+     话题：
+       /model/<模型名>/joint/<关节名>/cmd_vel（默认值，可用 topic 参数改），
+       跟 torque_motor 的 cmd_force 是两个不同的名字。话题名里同样焊死了模型名。
+
+     未暴露给调用方的参数（需要时自己加）：
+       topic / sub_topic / cmd_offset / use_actuator_msg / actuator_number
+       另外它只驱动关节的第一个轴。
+
+     用法：
+       <xacro:velocity_motor joint_name="left_wheel_joint"/>
+       <xacro:velocity_motor joint_name="left_wheel_joint" use_force_commands:='true' p_gain="5.0"/> -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="velocity_motor" params="
+    joint_name
+    initial_velocity:=0.0
+    use_force_commands:='false'
+    p_gain:=1.0
+    i_gain:=0.0
+    d_gain:=0.0
+    i_max:=1.0
+    i_min:=-1.0
+    cmd_max:=10.0
+    cmd_min:=-10.0">
+
+    <gazebo>
+      <!-- filename 是插件库名，name 是 gz 的完整类名 -->
+      <plugin filename="gz-sim-joint-controller-system" name="gz::sim::systems::JointController">
+        <joint_name>${joint_name}</joint_name>
+        <initial_velocity>${initial_velocity}</initial_velocity>
+        <!-- 默认 false = 速度模式：直接置关节速度，下面整组增益和限幅都不生效 -->
+        <use_force_commands>${use_force_commands}</use_force_commands>
+        <!-- 以下 7 个参数只在 use_force_commands=true（力矩模式）下生效 -->
+        <p_gain>${p_gain}</p_gain>
+        <i_gain>${i_gain}</i_gain>
+        <d_gain>${d_gain}</d_gain>
+        <i_max>${i_max}</i_max>
+        <i_min>${i_min}</i_min>
+        <cmd_max>${cmd_max}</cmd_max>
+        <cmd_min>${cmd_min}</cmd_min>
+      </plugin>
+    </gazebo>
+  </xacro:macro>
+</robot>

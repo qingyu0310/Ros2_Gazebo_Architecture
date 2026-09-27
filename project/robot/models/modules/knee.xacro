@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<!-- 膝盖：大腿末端那个圆柱，做的是膝关节的枢轴外形。它固定在大腿上、跟着大腿走
+     （腿动起来之后，小腿绕的就是它这根轴）。
+
+     约定：link 原点在**圆柱中心**，也就是膝轴上；圆柱躺倒（轴沿 y），
+     所以 body 里给的 xyz 直接就是关节位置，不用补偏移。
+
+     尺寸跟胯圆柱一模一样：半径 8mm、宽 22mm、5g。
+
+     牵连：这个圆柱装在大腿的**远端**（body 里给 (leg_span, 0, -leg_drop)，是相对大腿原点的偏移），
+     而小腿又挂在它的原点上 —— 小腿的近端必须和膝轴同点，不然腿会在膝盖处脱开。
+     改 leg_length / leg_angle 时，这个偏移是跟着 leg_span / leg_drop 走的，别写死数。
+
+     用法（在 body 里）：
+       <xacro:knee name="left_knee_link" joint_name="left_knee_cylinder_joint"
+                   parent="left_thigh_link" xyz="${leg_span} 0 ${-leg_drop}"/> -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find gazebo)/models/basic/cylinder.xacro"/>
+
+  <xacro:macro name="knee" params="
+    name
+    joint_name
+    parent
+    xyz:='0 0 0'
+    radius:=0.008
+    width:=0.022
+    mass:=0.005
+    ixx:=0.0000003
+    iyy:=0.0000003
+    izz:=0.0000002
+    color_name:=leg_black
+    color_rgba:='0.2 0.2 0.2 1.0'">
+
+    <xacro:cylinder_link
+      name="${name}"
+      radius="${radius}"
+      length="${width}"
+      rpy="1.57079632679 0 0"
+      mass="${mass}"
+      ixx="${ixx}"
+      iyy="${iyy}"
+      izz="${izz}"
+      color_name="${color_name}"
+      color_rgba="${color_rgba}"/>
+
+    <joint name="${joint_name}" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${name}"/>
+      <origin xyz="${xyz}" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+</robot>

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>ros2_layer</name>
+  <version>0.1.0</version>
+  <description>Generic ROS 2 node layer: nodes and helpers that depend on rclcpp-side APIs only.</description>
+  <maintainer email="qingyu@example.com">qingyu</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- 节点是头文件形式，这些依赖既是编译期的也是运行期的，用 <depend> 一并声明。
+       framework 带 Eigen，不用在这里再写 eigen。 -->
+  <depend>rclcpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>framework</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

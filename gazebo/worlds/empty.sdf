@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<!-- 空世界（gz 层自带，不用 gz 装的那份）。gz 自带的 empty.sdf 只加载
+     Physics / UserCommands / SceneBroadcaster 三个系统，传感器没有东西驱动：
+     IMU 要 gz-sim-imu-system，相机/雷达要 gz-sim-sensors-system。
+     所以这里显式挂上，launch 里的 gz_args 指向本文件。
+
+     注意关节状态发布器不在这个名单里：JointStatePublisher 只能挂在模型上，
+     挂世界上会报 "should be attached to a model entity" 然后静默不干活。
+     它由机器人模型里的 joint_encoder 宏挂（见 gazebo/plugins/sensor/joint_encoder.xacro）。 -->
+<sdf version="1.9">
+  <world name="empty">
+    <!-- 物理步长写死 1 ms（1000 Hz）。不写这块 gz 默认也是 0.001，但它是个空世界，
+         默认值改版就变，而 1 ms 是整条链的基准：四个电机的 publish_period_s = 0.001、
+         速度环的 dt、joint_encoder 的 update_rate = 1000 全是对着它定的，所以显式写出来。
+         real_time_factor 1.0 + 无 real_time_update_rate 时，更新率 = 1/步长 = 1000 Hz -->
+    <physics name="default_physics" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+
+    <light name="sun" type="directional">
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- 地面：车 spawn 在 z=0.04（轮子半径），四个轮子靠它托着 -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>1 1 1 1</ambient>
+            <diffuse>1 1 1 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

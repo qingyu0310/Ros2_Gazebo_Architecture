@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!-- 力矩电机：把关节当成一个"给多少力矩就出多少力"的电机，往 URDF 里挂 gz-sim 自带的
+     ApplyJointForce 系统，为该关节开一个外部力矩入口。本项目的力矩路线就是走它。
+
+     它是什么：
+       纯执行器接口，不含任何闭环。你往话题里发多少力矩，它就往关节轴上叠加多少；
+       控制律（LQR、PID）完全在你自己的 ROS 2 节点里。仿真只负责"施加"。
+
+     它不是什么：
+       不是电机模型。没有力矩常数 Kt、反电动势、电流环、力矩-转速曲线，也不做饱和。
+       仿真里唯一的力矩上限是 URDF <limit effort> 的硬夹断（物理引擎直接截断）。
+       真实的轮毂电机转速越高力矩越小，仿真里不体现 —— 所以仿真会比真机好控。
+
+     话题（插件不给配，由 gz 自己拼）：
+       /model/<模型名>/joint/<关节名>/cmd_force      类型 gz.msgs.Double
+       单位 N·m（转动关节）/ N（移动关节），原始值，不做归一化。
+       注意话题名里焊死了模型名：URDF 里改 robot name= 会静默打断 launch 里的 bridge 配置。
+
+     用法：
+       <xacro:torque_motor joint_name="left_hip_joint"/>
+
+     与 velocity_motor 的关系：
+       两条互斥路线，同一个关节不要两个都挂 —— Gazebo 对同时写同一个关节的插件没有仲裁规则，
+       不会报错，只是行为变得无法解释。 -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="torque_motor" params="joint_name">
+    <gazebo>
+      <!-- filename 是插件库名，name 是 gz 的完整类名 -->
+      <plugin filename="gz-sim-apply-joint-force-system" name="gz::sim::systems::ApplyJointForce">
+        <joint_name>${joint_name}</joint_name>
+      </plugin>
+    </gazebo>
+  </xacro:macro>
+</robot>

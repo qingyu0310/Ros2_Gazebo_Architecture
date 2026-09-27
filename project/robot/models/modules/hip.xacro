@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<!-- 胯（髋）：腿根部的那个圆柱，做的是胯关节的枢轴外形 —— 它自己不转，跟着底盘走
+     （腿动起来之后，绕的就是它这根轴）。
+
+     约定：link 原点在**圆柱中心**，也就是胯轴上；圆柱躺倒（轴沿 y），
+     所以 body 里给的 xyz 直接就是关节位置，不用补偏移。
+
+     尺寸：半径 8mm、宽 22mm、5g，跟 lqr 那台上的一致（那边是 base_link 下的 *_hip_link）。
+
+     牵连：胯圆柱和它那条大腿装在**同一个点**上（body 里给的 xyz 一模一样），
+     区别只是大腿以后会绕这个轴动、这个圆柱不动 —— 改一个必须同时改另一个，两个不能分开。
+
+     用法（在 body 里）：
+       <xacro:hip name="left_hip_link" joint_name="left_hip_cylinder_joint"
+                  parent="base_link" xyz="0 ${leg_y_offset} ${hip_height}"/> -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find gazebo)/models/basic/cylinder.xacro"/>
+
+  <xacro:macro name="hip" params="
+    name
+    joint_name
+    parent
+    xyz:='0 0 0'
+    radius:=0.008
+    width:=0.022
+    mass:=0.005
+    ixx:=0.0000003
+    iyy:=0.0000003
+    izz:=0.0000002
+    color_name:=leg_black
+    color_rgba:='0.2 0.2 0.2 1.0'">
+
+    <!-- 为什么要转 90°：cylinder_link 出来的圆柱默认轴沿 z，胯轴得沿 y，所以躺倒 -->
+    <xacro:cylinder_link
+      name="${name}"
+      radius="${radius}"
+      length="${width}"
+      rpy="1.57079632679 0 0"
+      mass="${mass}"
+      ixx="${ixx}"
+      iyy="${iyy}"
+      izz="${izz}"
+      color_name="${color_name}"
+      color_rgba="${color_rgba}"/>
+
+    <joint name="${joint_name}" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${name}"/>
+      <origin xyz="${xyz}" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+</robot>

@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!-- 底盘：一块定死的板子 —— 110 x 90 x 30 mm、1.11 kg，跟 lqr 那台整机的 base_link 同尺寸。
+
+     约定：link 原点在底盘**底面**（安装面），几何体由本宏自己往上抬半个厚度。
+     抬多少是底盘自己的事，所以 body 里只写"装在哪儿"，不用知道底盘多厚 ——
+     改 size 只需要改这一处，不会漏掉别处的半个厚度。
+
+     整车用到它时，底面就落在轮轴水平面上（离地高度 = 轮子半径 40mm）。
+     车上的东西（IMU、电池、以后的控制板）都往这 30mm 里塞，所以 size 要改的话先想清楚：
+     轮距 120mm 时，轮子内侧面到底盘侧面只剩 5mm。
+
+     用法（在 body 里）：
+       <xacro:chassis name="base_link"/>                 底盘底面放在父坐标系原点
+       <xacro:chassis name="deck" xyz="0 0 0.05"/>       底面放在父坐标系 z=50mm 处 -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find gazebo)/models/basic/box.xacro"/>
+
+  <xacro:macro name="chassis" params="
+    name
+    xyz:='0 0 0'
+    size:='0.11 0.09 0.03'
+    mass:=1.11
+    ixx:=0.0022
+    iyy:=0.0023
+    izz:=0.0014
+    color_name:=blue
+    color_rgba:='0.1 0.25 0.8 1.0'">
+
+    <!-- box_link 的 xyz 是"几何体/质心相对 link 原点的偏移"，所以这里要自己加上半个厚度。
+         size 是 '长 宽 高' 三个数，split()[2] 就是厚度 -->
+    <xacro:property name="half_thickness" value="${float(size.split()[2]) / 2.0}"/>
+    <xacro:property name="geom_xyz"
+      value="${xyz.split()[0]} ${xyz.split()[1]} ${float(xyz.split()[2]) + half_thickness}"/>
+
+    <xacro:box_link
+      name="${name}"
+      size="${size}"
+      xyz="${geom_xyz}"
+      mass="${mass}"
+      ixx="${ixx}"
+      iyy="${iyy}"
+      izz="${izz}"
+      color_name="${color_name}"
+      color_rgba="${color_rgba}"/>
+  </xacro:macro>
+</robot>

@@ -1,0 +1,100 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="imu_sensor" params="
+    reference_link
+    sensor_name:=imu_sensor
+    topic:=/imu
+    update_rate:=1000.0
+    always_on:='true'
+    visualize:='false'
+    pose:='0 0 0 0 0 0'
+    angular_velocity_x_mean:=0.0
+    angular_velocity_x_stddev:=0.0
+    angular_velocity_x_bias_mean:=0.0
+    angular_velocity_x_bias_stddev:=0.0
+    angular_velocity_y_mean:=0.0
+    angular_velocity_y_stddev:=0.0
+    angular_velocity_y_bias_mean:=0.0
+    angular_velocity_y_bias_stddev:=0.0
+    angular_velocity_z_mean:=0.0
+    angular_velocity_z_stddev:=0.0
+    angular_velocity_z_bias_mean:=0.0
+    angular_velocity_z_bias_stddev:=0.0
+    linear_acceleration_x_mean:=0.0
+    linear_acceleration_x_stddev:=0.0
+    linear_acceleration_x_bias_mean:=0.0
+    linear_acceleration_x_bias_stddev:=0.0
+    linear_acceleration_y_mean:=0.0
+    linear_acceleration_y_stddev:=0.0
+    linear_acceleration_y_bias_mean:=0.0
+    linear_acceleration_y_bias_stddev:=0.0
+    linear_acceleration_z_mean:=0.0
+    linear_acceleration_z_stddev:=0.0
+    linear_acceleration_z_bias_mean:=0.0
+    linear_acceleration_z_bias_stddev:=0.0">
+    
+    <gazebo reference="${reference_link}">
+      <sensor name="${sensor_name}" type="imu">
+        <always_on>${always_on}</always_on>
+        <visualize>${visualize}</visualize>
+        <update_rate>${update_rate}</update_rate>
+        <topic>${topic}</topic>
+        <pose>${pose}</pose>
+        <imu>
+          <angular_velocity>
+            <x>
+              <noise type="gaussian">
+                <mean>${angular_velocity_x_mean}</mean>
+                <stddev>${angular_velocity_x_stddev}</stddev>
+                <bias_mean>${angular_velocity_x_bias_mean}</bias_mean>
+                <bias_stddev>${angular_velocity_x_bias_stddev}</bias_stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>${angular_velocity_y_mean}</mean>
+                <stddev>${angular_velocity_y_stddev}</stddev>
+                <bias_mean>${angular_velocity_y_bias_mean}</bias_mean>
+                <bias_stddev>${angular_velocity_y_bias_stddev}</bias_stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>${angular_velocity_z_mean}</mean>
+                <stddev>${angular_velocity_z_stddev}</stddev>
+                <bias_mean>${angular_velocity_z_bias_mean}</bias_mean>
+                <bias_stddev>${angular_velocity_z_bias_stddev}</bias_stddev>
+              </noise>
+            </z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x>
+              <noise type="gaussian">
+                <mean>${linear_acceleration_x_mean}</mean>
+                <stddev>${linear_acceleration_x_stddev}</stddev>
+                <bias_mean>${linear_acceleration_x_bias_mean}</bias_mean>
+                <bias_stddev>${linear_acceleration_x_bias_stddev}</bias_stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>${linear_acceleration_y_mean}</mean>
+                <stddev>${linear_acceleration_y_stddev}</stddev>
+                <bias_mean>${linear_acceleration_y_bias_mean}</bias_mean>
+                <bias_stddev>${linear_acceleration_y_bias_stddev}</bias_stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>${linear_acceleration_z_mean}</mean>
+                <stddev>${linear_acceleration_z_stddev}</stddev>
+                <bias_mean>${linear_acceleration_z_bias_mean}</bias_mean>
+                <bias_stddev>${linear_acceleration_z_bias_stddev}</bias_stddev>
+              </noise>
+            </z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+</robot>

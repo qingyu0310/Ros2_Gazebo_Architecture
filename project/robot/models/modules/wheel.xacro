@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+<!-- 轮子：尺寸是定死的 —— 半径 40mm、宽 20mm、0.15kg，跟 lqr 那台整机上的同名轮子一模一样。
+
+     为什么要转 90°：cylinder_link 出来的圆柱默认轴沿 z，轮子的轴得沿 y，
+     所以 visual / inertial / collision 统一 rpy="1.57 0 0" 躺倒，关节也绕 y 转。
+     这样关节正转才是"往前滚"，LQR 那边算出来的力矩符号才对得上。
+
+     电机：轮子是驱动轮，默认就把力矩电机插件（gz 的 ApplyJointForce）挂在自己的关节上，
+     话题 /model/<模型名>/joint/<关节名>/cmd_force，类型 gz.msgs.Double，单位 N·m。
+     要被动轮就传 motor="false"。
+
+     改之前先看牵连：
+       radius 决定轮轴离地高度，整车 spawn 的 z 就是它（底盘原点是摆在轮轴高度上的）
+       effort / velocity 是关节的硬限位：gz 的 ApplyJointForce 就在 <limit effort> 上夹断，
+       数值要跟 modules::motor::Motor 的 max_effort / max_speed_radps 对齐（默认 5.0 / 60.0），
+       改这里等于改电机上限，两边会不一致
+       mu_rolling / mu_lateral 决定车能不能转弯（见下面 <gazebo> 那段）。两个接触面的摩擦
+       系数是**取小**生效的（轮子对地面），所以这里写的就是实际生效值
+
+     用法（在 body 里）：
+       <xacro:wheel name="front_left_wheel_link"
+                    joint_name="front_left_wheel_joint"
+                    parent="base_link"
+                    xyz="${wheelbase * 0.5} ${track * 0.5} 0"/> -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find gazebo)/models/basic/cylinder.xacro"/>
+  <xacro:include filename="$(find gazebo)/plugins/motor/torque_motor.xacro"/>
+
+  <xacro:macro name="wheel" params="
+    name
+    joint_name
+    parent
+    xyz:='0 0 0'
+    motor:='true'
+    radius:=0.030
+    width:=0.015
+    mass:=0.15
+    ixx:=0.00016
+    iyy:=0.00016
+    izz:=0.00027
+    effort:=5.0
+    velocity:=60.0
+    mu_rolling:=1.0
+    mu_lateral:=0.1
+    color_name:=wheel_black
+    color_rgba:='0.05 0.05 0.05 1.0'">
+
+    <xacro:cylinder_link
+      name="${name}"
+      radius="${radius}"
+      length="${width}"
+      rpy="1.57079632679 0 0"
+      mass="${mass}"
+      ixx="${ixx}"
+      iyy="${iyy}"
+      izz="${izz}"
+      color_name="${color_name}"
+      color_rgba="${color_rgba}"/>
+
+    <joint name="${joint_name}" type="continuous">
+      <parent link="${parent}"/>
+      <child link="${name}"/>
+      <origin xyz="${xyz}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit effort="${effort}" velocity="${velocity}"/>
+    </joint>
+
+    <!-- 摩擦：必须各向异性，不然车只能直着走、转不了弯。
+         四个轮子都是固定轮（没有转向关节），转向靠左右轮速差，那是要四个轮子横着刮地的。
+         各向同性摩擦（URDF 不写就是这个，gz 默认 mu=1 各方向一样）下，抗横滑需要的力矩
+         恒大于驱动能给的偏航力矩：
+           驱动 4·(mu·N)·(轮距/2)      = 4·mu·N·0.06
+           抗横滑 4·(mu·N)·(轮到中心)  = 4·mu·N·0.0849
+         比值 √2 是正方形轮距轴距的几何决定的，两边都正比于 mu·N —— 所以加大 effort 没用，
+         整体降摩擦也没用，只能把侧向那一路单独压下来。判据：mu_lateral 要明显小于
+         mu_rolling/√2（默认 0.1 对 1.0，抗横滑力矩只剩驱动的 1/7）。
+         fdir1 = 滚动方向 = link 的 x 轴（几何绕 x 转了 90°，关节轴是 y，绕 y 转就沿 x 滚） -->
+    <gazebo reference="${name}">
+      <mu1>${mu_rolling}</mu1>
+      <mu2>${mu_lateral}</mu2>
+      <fdir1>1 0 0</fdir1>
+    </gazebo>
+
+    <!-- 力矩入口：插件跟着关节走，所以关节建在哪它就在哪。
+         一个关节一个插件实例，四个轮子就是四个实例，互不干涉 -->
+    <xacro:if value="${motor}">
+      <xacro:torque_motor joint_name="${joint_name}"/>
+    </xacro:if>
+  </xacro:macro>
+</robot>

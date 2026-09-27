@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<!-- 腿：一根连杆 —— 大腿和小腿用的是同一根，尺寸/质量/惯量完全一样，只是装的方向相反
+     （大腿往前下方长，小腿往后下方长）。
+
+     约定：link 原点在**近端关节轴**上，也就是这条腿绕它转的那个轴；几何体从原点朝远端长出去。
+     这样 body 里给的 xyz 就是"关节装在哪"，不用自己扣半个杆长：
+     大腿的近端是胯轴，小腿的近端是膝轴。
+
+     杆长和角度写在本文件顶上的 property 里（不是宏参数），因为整车摆位要用它们的投影：
+       leg_length 0.056 m，leg_angle 40°（与水平面的夹角）
+       → leg_span = L·cos40° = 42.9 mm（水平投影）
+         leg_drop = L·sin40° = 36.0 mm（竖直投影）
+     大、小腿对称张开成"∨"（膝盖在最低点），胯轴到轮轴 = 2·leg_drop = 72 mm。
+
+     朝向用 direction 选，不用传角度：
+       +1 → 远端在 ( +leg_span, 0, -leg_drop )，往前下方（大腿）
+       -1 → 远端在 ( -leg_span, 0, -leg_drop )，往后下方（小腿）
+
+     标准姿态就是这套默认值（α = 40°），腿现在**不动**：关节写死 fixed。
+     以后要伸缩，把下面的 fixed 换成 revolute 并补 limit —— lqr 那边的取值是
+     effort 1.5 N·m、velocity 6.0 rad/s、damping 0.05；符号约定 α = 50° - q_hip、
+     β = 80° - q_knee，对称伸缩（e = 0）时 q_knee = -2·q_hip。
+
+     用法（在 body 里）：
+       <xacro:leg name="left_thigh_link" joint_name="left_hip_joint"
+                  parent="base_link"           xyz="0 ${leg_y_offset} ${hip_height}"/>
+       <xacro:leg name="left_calf_link"  joint_name="left_knee_joint"
+                  parent="left_knee_link"      direction="-1"/> -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find gazebo)/models/basic/box.xacro"/>
+
+  <xacro:property name="leg_length"    value="0.056"/>
+  <xacro:property name="leg_angle"     value="0.6981317008"/>
+  <xacro:property name="leg_span"      value="${leg_length * cos(leg_angle)}"/>
+  <xacro:property name="leg_drop"      value="${leg_length * sin(leg_angle)}"/>
+  <xacro:property name="leg_half_span" value="${leg_span * 0.5}"/>
+  <xacro:property name="leg_half_drop" value="${leg_drop * 0.5}"/>
+  <xacro:property name="leg_pitch"     value="${pi / 2 - leg_angle}"/>
+
+  <xacro:macro name="leg" params="
+    name
+    joint_name
+    parent
+    xyz:='0 0 0'
+    direction:=1
+    section:='0.016 0.018'
+    mass:=0.03
+    ixx:=0.0000087
+    iyy:=0.0000085
+    izz:=0.0000015
+    color_name:=leg_black
+    color_rgba:='0.2 0.2 0.2 1.0'">
+
+    <!-- box_link 的 xyz/rpy 是"几何体+质心相对 link 原点的位姿"：
+         先把杆竖直摆好、再绕 y 转 leg_pitch（让它与水平面成 40°），最后平移到杆的中点
+         （中点 = 远端的一半）。direction 同时翻这两处，杆就朝另一边张开。
+         size 是 '长 宽 高'，竖着放的杆高度就是杆长 -->
+    <xacro:box_link
+      name="${name}"
+      size="${section} ${leg_length}"
+      xyz="${direction * leg_half_span} 0 ${-leg_half_drop}"
+      rpy="0 ${-direction * leg_pitch} 0"
+      mass="${mass}"
+      ixx="${ixx}"
+      iyy="${iyy}"
+      izz="${izz}"
+      color_name="${color_name}"
+      color_rgba="${color_rgba}"/>
+
+    <joint name="${joint_name}" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${name}"/>
+      <origin xyz="${xyz}" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+</robot>
