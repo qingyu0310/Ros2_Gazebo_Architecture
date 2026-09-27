@@ -158,39 +158,3 @@
     control_mode: effort
     max_effort: 1.5
     max_speed_radps: 6.0
-
-# 腿姿保持器（文档 §8 阶段 2）：静态重力前馈 U0 + 关节 PD，把四个腿关节顶在标准姿态上。
-# 临时基线 —— 只解决"腿在自重下折下去"，车身的平衡还是 /chassis 那条环；阶段 3 上来就换掉。
-# 它管的话题跟 /chassis 是两拨：这边四条 /motor/<关节>/command，那边两条 /motor/<轮子>/command
-/leg:
-  ros__parameters:
-    dt: 0.001                           # 1 kHz，跟平衡环、gz 物理步长一个节奏
-    joint_states_topic: /joint_states
-
-    # 关节接线：顺序 [左髋, 右髋, 左膝, 右膝]，跟上面 /chassis 段的 leg_joint_names /
-    # leg_command_topics 是同一份东西，改一处要跟着改另一处
-    joint_names: [left_hip_joint, right_hip_joint, left_knee_joint, right_knee_joint]
-    command_topics: [/motor/left_hip/command, /motor/right_hip/command,
-                     /motor/left_knee/command, /motor/right_knee/command]
-
-    # ---- 腿几何与质量：算前馈 U0 用，跟 modules/leg.xacro、modules/wheel.xacro 一份数；
-    #      body_mass 跟 /chassis 段那个同源。模型改了这里要跟着改，对不上只是腿会歪 ----
-    leg_length: 0.056                   # L，单根连杆长
-    leg_angle: 0.6981317008             # 40°，与水平面的夹角
-    body_mass: 1.25                     # 除两个轮子外的整车质量（含四根连杆和膝上圆柱）
-    rod_mass: 0.03                      # 单根连杆
-    joint_mass: 0.005                   # 膝上的关节圆柱
-    wheel_mass: 0.15
-    gravity: 9.81
-
-    # ---- 目标腿姿：仅供退役的 leg 调试节点；正常仿真由 chassis 的 target_height_m 接管 ----
-    target_hip_rad: 0.0
-    target_knee_rad: 0.0
-
-    # ---- PD 与限幅：kp/kd 起步值抄 lqr 那台的 leg 节点（同一个模型），力给到静态需求
-    #      （标准姿态膝约 0.26 N·m）的三倍多，电机那层还有 1.5 的硬限位 ----
-    kp: 2.0                             # N·m/rad
-    kd: 0.05                            # N·m·s/rad
-    max_effort: 1.0                     # 单关节出力上限 N·m
-    joint_sign: [1.0, 1.0, 1.0, 1.0]    # 正方向反了翻成 -1.0，顺序同上
-    feedback_timeout_s: 0.10            # 这么久没收到 /joint_states 就归零

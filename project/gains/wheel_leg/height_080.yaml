@@ -109,7 +109,7 @@ checks:
   左右对称: pass
   俯仰残差 = 质心偏移力矩: pass
   U0 在力矩上限内: pass
-  U0 与腿姿保持器一致: pass
+  U0 与标称静力参考一致: pass
   差分步长扫描稳定: pass
   维度: pass
   有限性: pass

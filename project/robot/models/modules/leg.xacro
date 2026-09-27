@@ -28,8 +28,8 @@
        q_hip ∈ [-12.5°, +32.5°]（先顶到膝的 -65°，不是胯自己的 [-15°, +35°]）；
        关节力矩 1.5 N·m（静态需求约 3 倍余量）、转速 6.0 rad/s、阻尼 0.05。
      力矩入口：每个腿关节挂一个 torque_motor，跟轮子同一个插件，话题
-     /model/<模型名>/joint/<关节名>/cmd_force。现在没人往里发力矩（腿姿保持器见文档 §8 阶段 2），
-     所以**光跑仿真腿会在自重下折下去**，不是模型改错了。
+     /model/<模型名>/joint/<关节名>/cmd_force。运行时由 chassis 全身 LQR 计算力矩，
+     经 MotorNode 和 ros_gz_bridge 送进 Gazebo。
 
      用法（在 body 里，限位按关节传 leg.xacro 顶上那几个 property）：
        <xacro:leg name="left_thigh_link" joint_name="left_hip_joint"

@@ -1567,7 +1567,7 @@ int main(int argc, char** argv)
         report(checks, "U0 在力矩上限内", std::max({std::abs(u0_wheel), std::abs(u0_hip), std::abs(u0_knee)}) < effort_limit,
                "max |U0| = " + std::to_string(std::max({std::abs(u0_wheel), std::abs(u0_hip), std::abs(u0_knee)})));
         const bool nominal_operating_point = std::abs(operating_height - nominal_height) < 1e-10;
-        report(checks, "U0 与腿姿保持器一致",
+        report(checks, "U0 与标称静力参考一致",
                !nominal_operating_point ||
                    (std::abs(u0_hip + 0.0147) < 5e-4 && std::abs(u0_knee + 0.2567) < 5e-4),
                nominal_operating_point

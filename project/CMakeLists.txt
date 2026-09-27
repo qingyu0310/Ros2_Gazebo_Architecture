@@ -34,11 +34,6 @@ add_executable(motor node/motor/motor.cpp)
 target_link_libraries(motor ros2_layer::ros2_layer)
 install(TARGETS motor DESTINATION lib/${PROJECT_NAME})
 
-# 腿姿保持器保留为阶段 2 单独调试工具；正常 sim.launch.py 不再启动它
-add_executable(leg node/leg/leg.cpp)
-target_link_libraries(leg ros2_layer::ros2_layer)
-install(TARGETS leg DESTINATION lib/${PROJECT_NAME})
-
 # 离线工具：从展开的 URDF 建平面共模模型，线性化 A/B，解 K，写 gains/ 下的增益文件。
 # 不在仿真链路上，跑一次生成一次；读 URDF 用 tinyxml2（ros2 自带）
 add_executable(generate_wheel_leg_lqr tools/generate_wheel_leg_lqr.cpp)
@@ -60,6 +55,14 @@ if(BUILD_TESTING)
 
     ament_add_gtest(test_leg_height test/test_leg_height.cpp)
     target_include_directories(test_leg_height PRIVATE node/chassis)
+
+    ament_add_gtest(test_runtime_lqr test/test_runtime_lqr.cpp)
+    target_include_directories(test_runtime_lqr PRIVATE node/chassis)
+    target_link_libraries(test_runtime_lqr framework::framework)
+
+    ament_add_gtest(test_chassis_modules test/test_chassis_modules.cpp)
+    target_include_directories(test_chassis_modules PRIVATE node/chassis)
+    target_link_libraries(test_chassis_modules framework::framework yaml-cpp)
 endif()
 
 ament_package()
