@@ -10,7 +10,7 @@
  * @note 参数加载、增益调度、安全监督、Pitch/Roll LQR、腿高与力矩分配均已拆成独立类。
  *       本节点只负责 ROS 接线、反馈缓存和一拍控制流程的编排。
  * @note 话题：订 /imu、/joint_states、/chassis/cmd_vel；发六路 /motor/<执行器>/command（N·m）
- * @note K/X0/U0 从离线生成的 gains/wheel_leg/nominal.yaml 加载；接口或模型不一致时拒绝启动
+ * @note K/X0/U0 从离线生成的 params/leg_gain/nominal.yaml 加载；接口或模型不一致时拒绝启动
  */
 
 #pragma once
@@ -65,7 +65,9 @@ public:
 
     ChassisNode() : rclcpp::Node("chassis")
     {
-        const std::string gain_directory  = ament_index_cpp::get_package_share_directory("project") + "/gains/wheel_leg/";
+        // 获取身高增益路径
+        const std::string gain_directory  = ament_index_cpp::get_package_share_directory("project") + "/params/leg_gain/";
+        // 获取底盘所需参数
         const ChassisConfiguration config = ChassisConfiguration::declare_from(*this, gain_directory);
         model_   = config.model;
         control_ = config.control;
@@ -78,17 +80,20 @@ public:
         joint_names_    = config.wheel_joint_names;
         command_topics_ = config.wheel_command_topics;
 
-        gain_schedule_ = LqrGainSchedule(config.gain_paths, control_.dt, model_.wheel_radius, config.robot_description);
+        // 力矩分配器
         allocator_     = std::make_unique<TorqueAllocator>(config.allocator_config());
+        // 身高增益调度器，掌管控制律参数
+        gain_schedule_ = LqrGainSchedule(config.gain_paths, control_.dt, model_.wheel_radius, config.robot_description);
+        // 身高运动学，将腿轮高度转换成角度或者将角度反解成高度
         height_kinematics_ = std::make_unique<LegHeightKinematics>(config.height_kinematics_config());
-
         if (height_.target_height_m < height_kinematics_->minimum_height() || height_.target_height_m > height_kinematics_->maximum_height())
         {
             throw std::invalid_argument("target_height_m 超出软限位可达范围");
         }
-        height_reference_     = height_kinematics_->from_height(height_kinematics_->nominal_height());
+        height_reference_ = height_kinematics_->from_height(height_kinematics_->nominal_height());
 
         gravity_compensation_ = LegGravityCompensation(model_, height_);
+
         safety_supervisor_.configure(safety_, control_.fall_angle_rad, leg_.limit_lower, leg_.limit_upper);
 
         for (std::size_t i = 0; i < kWheelCount; ++i)
@@ -121,24 +126,29 @@ public:
     }
 
 private:
-    PitchLqrController  pitch_lqr_;
-    RollLqrController   roll_lqr_;
-    LqrGainSchedule     gain_schedule_;
-    SafetySupervisor    safety_supervisor_;
+    ModelParams   model_;                       // 模型参数：轮半径、质量、惯量、重力；里程换算和重力前馈都读它
+    ControlParams control_;                     // 控制参数：节拍 dt、符号、共模力矩上限、变化率
+    RemoteParams  remote_;                      // 遥控参数：速度/偏航上限、身高步长、指令超时
+    TopicParams   topics_;                      // 反馈话题名：IMU / 关节状态
+    LegParams     leg_;                         // 腿接线与限位：四个关节名、指令话题、joint_sign、软限位
+    SafetyParams  safety_;                      // 安全参数：反馈超时、节拍卡顿阈值、恢复驻留时长
+    HeightParams  height_;                      // 腿高参数：目标高度、变化率、换算几何与重力前馈质量
+    ActuatorEnableParams enabled_;              // 五路消融开关（轮/髋/膝共模 + 髋/膝差模），运行期可改
 
-    ModelParams   model_;
-    ControlParams control_;
-    RemoteParams  remote_;
-    TopicParams   topics_;
-    LegParams     leg_;
-    SafetyParams  safety_;
-    HeightParams  height_;
-    ActuatorEnableParams enabled_;
+    ChassisState state_;                        // 最近一帧反馈，加上控制用的那四个量
+    TeleopTarget teleop_;                       // 遥控目标值
+    StatusFlags  flags_;                        // 反馈/标定/倒地，都是标志位
+    
+    PitchLqrController  pitch_lqr_;             // 俯仰全身 LQR：8 状态，出轮/髋/膝三路共模力矩
+    RollLqrController   roll_lqr_;              // 横滚 LQR：吃左右腿差模四状态，出髋/膝差模力矩
+    LqrGainSchedule     gain_schedule_;         // 按腿高插值的工作点增益表：K/X0/U0/几何雅可比一起换
+    SafetySupervisor    safety_supervisor_;     // 安全状态机：反馈超时/卡拍/倒地 → 准不准控制、要不要重置
 
-    std::unique_ptr<TorqueAllocator>     allocator_;
-    LegGravityCompensation               gravity_compensation_;
-    LegHeightKinematics::Reference       height_reference_ {};
-    std::unique_ptr<LegHeightKinematics> height_kinematics_;
+    std::unique_ptr<TorqueAllocator>     allocator_;                // 力矩分配器：把六路期望力矩折成满足限幅/变化率/软限位的实际值
+    LegGravityCompensation               gravity_compensation_;     // 腿重力前馈：按当前腿高算髋/膝顶住自重的力矩
+    LegHeightKinematics::Reference       height_reference_ {};      // 当前指令的腿高工作点（高度 + 髋/膝角），由目标按变化率逼近
+    std::unique_ptr<LegHeightKinematics> height_kinematics_;        // 腿高 ↔ 髋膝角换算 + 软限位内的可达范围
+
 
     // 接线：哪个关节、指令发到哪个话题。两组都按下标对齐
     std::array<std::string, kWheelCount> joint_names_{};
@@ -147,10 +157,6 @@ private:
     // 发给两个电机的指令（力矩 N·m）。电机在自己的进程里订这两个话题
     std::array<rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr, kWheelCount> command_pub_{};
     std::array<rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr, 4> leg_command_pub_{};
-
-    ChassisState state_;    // 最近一帧反馈，加上控制用的那四个量
-    TeleopTarget teleop_;   // 遥控目标值
-    StatusFlags  flags_;    // 反馈/标定/倒地，都是标志位
 
     // 最后一条 cmd_vel 的时刻。用 steady_clock：仿真时间会被暂停/复位
     std::chrono::steady_clock::time_point last_command_time_{};
@@ -189,20 +195,19 @@ private:
             const std::string& name = parameter.get_name();
             try
             {
-                if (name == "enable_wheel_common")      enabled_.wheel_common = parameter.as_bool();
-                else if (name == "enable_hip_common")   enabled_.hip_common   = parameter.as_bool();
-                else if (name == "enable_knee_common")  enabled_.knee_common  = parameter.as_bool();
-                else if (name == "enable_hip_diff")     enabled_.hip_diff     = parameter.as_bool();
-                else if (name == "enable_knee_diff")    enabled_.knee_diff    = parameter.as_bool();
+                if      (name == "enable_wheel_common")     enabled_.wheel_common = parameter.as_bool();
+                else if (name == "enable_hip_common")       enabled_.hip_common   = parameter.as_bool();
+                else if (name == "enable_knee_common")      enabled_.knee_common  = parameter.as_bool();
+                else if (name == "enable_hip_diff")         enabled_.hip_diff     = parameter.as_bool();
+                else if (name == "enable_knee_diff")        enabled_.knee_diff    = parameter.as_bool();
                 else if (name == "target_height_m")
                 {
                     const double target = parameter.as_double();
                     if (!std::isfinite(target) || target < height_kinematics_->minimum_height() || target > height_kinematics_->maximum_height())
                     {
                         result.successful = false;
-                        result.reason = "target_height_m 超出软限位可达范围 [" +
-                            std::to_string(height_kinematics_->minimum_height()) + ", " +
-                            std::to_string(height_kinematics_->maximum_height()) + "]";
+                        result.reason = "target_height_m 超出软限位可达范围 [" + std::to_string(height_kinematics_->minimum_height()) + ", " +
+                                                                                std::to_string(height_kinematics_->maximum_height()) + "]";
                         return result;
                     }
                     height_.target_height_m = target;
@@ -336,7 +341,8 @@ private:
         if (height_direction != 0.0)
         {
             const double requested_height = std::clamp(height_.target_height_m + height_direction * remote_.height_step_m,
-                height_kinematics_->minimum_height(), height_kinematics_->maximum_height());
+                                                        height_kinematics_->minimum_height(), 
+                                                        height_kinematics_->maximum_height());
 
             if (requested_height != height_.target_height_m)
             {
@@ -482,8 +488,8 @@ private:
         // 腿高：先按变化率把"目标"变成这一拍实际允许的"指令高度"，再用它挑工作点。
         // 指令高度一帧最多动 maximum_rate_mps * dt，所以换腿高不会一步跳过去
         const LegHeightKinematics::Reference previous_height_reference = height_reference_;
-        const double commanded_height = LegHeightKinematics::move_towards(previous_height_reference.height,
-            height_.target_height_m, height_.maximum_rate_mps, control_.dt);
+        const double commanded_height = LegHeightKinematics::move_towards(previous_height_reference.height, height_.target_height_m, 
+                                                                     height_.maximum_rate_mps,             control_.dt);
 
         height_reference_ = height_kinematics_->from_height(commanded_height);
 

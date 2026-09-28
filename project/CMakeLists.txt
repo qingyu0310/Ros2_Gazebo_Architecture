@@ -34,7 +34,7 @@ add_executable(motor node/motor/motor.cpp)
 target_link_libraries(motor ros2_layer::ros2_layer)
 install(TARGETS motor DESTINATION lib/${PROJECT_NAME})
 
-# 离线工具：从展开的 URDF 建平面共模模型，线性化 A/B，解 K，写 gains/ 下的增益文件。
+# 离线工具：从展开的 URDF 建平面共模模型，线性化 A/B，解 K，写 params/leg_gain/ 下的增益文件。
 # 不在仿真链路上，跑一次生成一次；读 URDF 用 tinyxml2（ros2 自带）
 add_executable(generate_wheel_leg_lqr tools/generate_wheel_leg_lqr.cpp)
 target_link_libraries(generate_wheel_leg_lqr framework::framework tinyxml2::tinyxml2)
@@ -45,7 +45,7 @@ add_executable(keyboard node/keyboard/keyboard.cpp)
 target_link_libraries(keyboard ros2_layer::ros2_layer ament_index_cpp::ament_index_cpp)
 install(TARGETS keyboard DESTINATION lib/${PROJECT_NAME})
 
-install(DIRECTORY launch params robot gains
+install(DIRECTORY launch params robot
     DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)

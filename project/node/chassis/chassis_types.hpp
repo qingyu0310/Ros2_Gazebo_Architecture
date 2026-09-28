@@ -70,7 +70,7 @@ struct SafetyParams
 {
     double feedback_timeout_s   {0.10};  // IMU/关节反馈超过这么久没更新就判故障，六路清零
     double max_control_period_s {0.02};  // 相邻两拍的控制周期超过它就判卡顿（1 ms 的 20 倍）
-    double recovery_dwell_s     {0.20};  // 故障恢复要连续健康这么久才重新接管控制
+    double recovery_dwell_s     {0.08};  // 故障恢复要连续健康这么久才重新接管控制
 };
 
 /**

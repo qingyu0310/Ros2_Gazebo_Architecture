@@ -24,7 +24,7 @@
     wheel_effort_rate_limit: 100.0      # 单轮力矩变化率 N·m/s；1 ms 一拍最多变化 0.10 N·m
 
     # ---- 高度增益调度：每份都由同一 URDF 在对应腿高工作点重新线性化并通过 21 项检查 ----
-    # 文件名相对 gains/wheel_leg/；运行时在相邻高度间线性插值 K、X0、U0 和 roll_per_q。
+    # 文件名相对 params/leg_gain/；运行时在相邻高度间线性插值 K、X0、U0 和 roll_per_q。
     gain_files: [height_058.yaml, nominal.yaml, height_080.yaml,
                  height_090.yaml, height_100.yaml, height_104.yaml]
 
@@ -51,11 +51,11 @@
     wheel_mass: 0.15                     # 单轮质量 kg
 
     # ---- Q/R 只给离线 generate_wheel_leg_lqr 生成增益用。运行时 chassis 直接读
-    #      gains/wheel_leg/nominal.yaml 的 K/X0/U0，不在节点内重新求解 ----
+    #      params/leg_gain/nominal.yaml 的 K/X0/U0，不在节点内重新求解 ----
     q_pitch: [700.0, 200.0, 1000.0, 550.0, 300.0, 30.0, 300.0, 30.0]    # [s, ṡ, pitch, θ̇, q_h+, q̇_h+, q_k+, q̇_k+]
-    r_pitch: [1.0, 2.0, 2.0]                                            # [tau_w+, tau_h+, tau_k+]，调小就更爱用那一路
+    r_pitch: [1.0, 2.0, 8.0]                                            # [tau_w+, tau_h+, tau_k+]，调小就更爱用那一路
     q_roll: [800.0, 60.0, 400.0, 40.0, 400.0, 40.0]                     # [roll, φ̇, q_h-, q̇_h-, q_k-, q̇_k-]
-    r_roll: [2.0, 2.0]                                                  # [tau_h-, tau_k-]
+    r_roll: [2.0, 20.0]                                                 # [tau_h-, tau_k-]
     pitch_sign: 1.0                     # 俯仰方向反了翻成 -1.0
     control_sign: 1.0                   # 力矩方向反了翻成 -1.0
 
@@ -73,11 +73,11 @@
     leg_joint_names: [left_hip_joint, right_hip_joint, left_knee_joint, right_knee_joint]
     leg_command_topics: [/motor/left_hip/command, /motor/right_hip/command,
                          /motor/left_knee/command, /motor/right_knee/command]
-    leg_max_effort: [1.5, 1.5, 1.5, 1.5]              # 单关节力矩上限 N·m，抄 lqr 那台的 leg_effort
-    leg_max_speed_radps: [6.0, 6.0, 6.0, 6.0]         # 关节速度上限 rad/s
+    leg_max_effort: [1.5, 1.5, 1.5, 1.5]                    # 单关节力矩上限 N·m，抄 lqr 那台的 leg_effort
+    leg_max_speed_radps: [6.0, 6.0, 6.0, 6.0]               # 关节速度上限 rad/s
     leg_limit_lower: [-0.2618, -0.2618, -1.1345, -1.1345]   # 髋 -15°、膝 -65°，硬限位
     leg_limit_upper: [0.6109, 0.6109, 0.4363, 0.4363]       # 髋 +35°、膝 +25°
-    leg_joint_sign: [1.0, 1.0, 1.0, 1.0]              # 正方向反了翻成 -1.0，等 §8 阶段 0 把六个关节正方向确认完再定
+    leg_joint_sign: [1.0, 1.0, 1.0, 1.0]                    # 正方向反了翻成 -1.0，等 §8 阶段 0 把六个关节正方向确认完再定
     leg_effort_rate_limit: [500.0, 500.0, 500.0, 500.0]     # N·m/s；1 ms 一拍最多变化 0.5 N·m
     leg_soft_limit_margin: [0.10, 0.10, 0.10, 0.10]         # 软限位相对硬限位向内收 0.10 rad
     leg_soft_limit_kp: [2.0, 2.0, 2.0, 2.0]                 # 越过软限位后的恢复刚度 N·m/rad

@@ -10,7 +10,7 @@
  * 用法（在仓库根目录跑）：
  *   ros2 run project generate_wheel_leg_lqr [xacro或urdf] [输出yaml] [参数yaml] [腿高m]
  *   默认：project/robot/models/bodys/wheel_leg_robot.xacro
- *         project/gains/wheel_leg/nominal.yaml
+ *         project/params/leg_gain/nominal.yaml
  *         project/params/chassis.yaml   （从这里取 q_pitch / r_pitch）
  *
  * 模型与公式的依据：docs/轮腿机器人平面模型参数与公式.md（那边写死了口径，改这里先改那边）
@@ -1417,7 +1417,7 @@ int main(int argc, char** argv)
 {
     try {
         const std::string urdf_path   = argc > 1 ? argv[1] : "project/robot/models/bodys/wheel_leg_robot.xacro";
-        const std::string output_path = argc > 2 ? argv[2] : "project/gains/wheel_leg/nominal.yaml";
+        const std::string output_path = argc > 2 ? argv[2] : "project/params/leg_gain/nominal.yaml";
         const std::string params_path = argc > 3 ? argv[3] : "project/params/chassis.yaml";
         const std::string side        = "left";
         constexpr double  gravity     = 9.81;

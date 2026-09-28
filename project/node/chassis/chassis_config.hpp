@@ -72,11 +72,11 @@ struct ChassisConfiguration
         // ---- 控制：上限和角度取绝对值，符号单独留（pitch_sign / control_sign 允许为负）----
         auto& control = result.control;
         control.dt              = node.declare_parameter("dt",              control.dt);
-        control.max_effort      = std::abs(node.declare_parameter("max_effort",     control.max_effort));
-        control.fall_angle_rad  = std::abs(node.declare_parameter("fall_angle_rad", control.fall_angle_rad));
+        control.mode            = node.declare_parameter("control_mode",    control.mode);
         control.pitch_sign      = node.declare_parameter("pitch_sign",      control.pitch_sign);
         control.control_sign    = node.declare_parameter("control_sign",    control.control_sign);
-        control.mode            = node.declare_parameter("control_mode",    control.mode);
+        control.max_effort      = std::abs(node.declare_parameter("max_effort",     control.max_effort));
+        control.fall_angle_rad  = std::abs(node.declare_parameter("fall_angle_rad", control.fall_angle_rad));
         control.wheel_effort_rate_limit = std::abs(node.declare_parameter("wheel_effort_rate_limit", control.wheel_effort_rate_limit));
         
         // 这些权重只供离线生成器读同一份 YAML；运行时声明后丢弃，不把它们混进控制器状态。
@@ -87,12 +87,11 @@ struct ChassisConfiguration
  
         // ---- 遥控：速度/偏航上限、身高步长、指令超时 ----
         auto& remote = result.remote;
-
-        remote.cmd_vel_topic = node.declare_parameter("cmd_vel_topic",           remote.cmd_vel_topic);
+        remote.yaw_kp        = std::abs(node.declare_parameter("yaw_kp",       remote.yaw_kp));
         remote.max_velocity  = std::abs(node.declare_parameter("max_velocity", remote.max_velocity));
         remote.max_yaw_rate  = std::abs(node.declare_parameter("max_yaw_rate", remote.max_yaw_rate));
         remote.height_step_m = node.declare_parameter("height_step_m",           remote.height_step_m);
-        remote.yaw_kp        = std::abs(node.declare_parameter("yaw_kp",      remote.yaw_kp));
+        remote.cmd_vel_topic = node.declare_parameter("cmd_vel_topic",           remote.cmd_vel_topic);
         remote.max_differential  = std::abs(node.declare_parameter("max_differential", remote.max_differential));
         remote.command_timeout_s = std::abs(node.declare_parameter("command_timeout_s", remote.command_timeout_s));
 
@@ -104,21 +103,22 @@ struct ChassisConfiguration
 
         // ---- 消融开关：五路，运行中可以用 ros2 param set 改，用来复现"少了某一路会怎样" ----
         auto& enabled = result.enabled;
-        enabled.wheel_common = node.declare_parameter("enable_wheel_common", enabled.wheel_common);
         enabled.hip_common   = node.declare_parameter("enable_hip_common",   enabled.hip_common);
-        enabled.knee_common  = node.declare_parameter("enable_knee_common",  enabled.knee_common);
         enabled.hip_diff     = node.declare_parameter("enable_hip_diff",     enabled.hip_diff);
         enabled.knee_diff    = node.declare_parameter("enable_knee_diff",    enabled.knee_diff);
+        enabled.knee_common  = node.declare_parameter("enable_knee_common",  enabled.knee_common);
+        enabled.wheel_common = node.declare_parameter("enable_wheel_common", enabled.wheel_common);
 
         // ---- 反馈话题 ----
         auto& topics = result.topics;
         topics.imu_topic          = node.declare_parameter("imu_topic", topics.imu_topic);
         topics.joint_states_topic = node.declare_parameter("joint_states_topic", topics.joint_states_topic);
 
-        // ---- 增益文件：只给文件名就当在本包 gains/ 目录里，带斜杠的按原样用 ----
+        // ---- 增益文件：只给文件名就当在本包 params/leg_gain/ 目录里，带斜杠的按原样用 ----
         const std::string gain_file = node.declare_parameter("gain_file", gain_directory + "nominal.yaml");
-        auto gain_files = node.declare_parameter<std::vector<std::string>>("gain_files", 
-            {"height_058.yaml", "nominal.yaml", "height_080.yaml", "height_090.yaml", "height_100.yaml", "height_104.yaml"});
+        auto gain_files = node.declare_parameter<std::vector<std::string>>(
+            "gain_files", {"height_058.yaml", "nominal.yaml", "height_080.yaml", "height_090.yaml", "height_100.yaml", "height_104.yaml"});
+        
         if (gain_files.empty())
         {
             gain_files.push_back(gain_file);
@@ -127,6 +127,7 @@ struct ChassisConfiguration
         {
             result.gain_paths.push_back(configured_path.find('/') == std::string::npos ? gain_directory + configured_path : configured_path);
         }
+
         // URDF 文本从参数来（launch 把 robot_description 一起喂进来），用来核对增益文件里的模型哈希
         result.robot_description = node.declare_parameter("robot_description", std::string{});
 
@@ -138,8 +139,6 @@ struct ChassisConfiguration
 
         // ---- 四个腿关节：接线、限位、软限位、变化率，顺序 [左髋, 右髋, 左膝, 右膝] ----
         auto& leg = result.leg;
-        leg.joint_names     = node.declare_parameter<std::vector<std::string>>("leg_joint_names",    leg.joint_names);
-        leg.command_topics  = node.declare_parameter<std::vector<std::string>>("leg_command_topics", leg.command_topics);
         leg.max_effort      = node.declare_parameter<std::vector<double>>("leg_max_effort",          leg.max_effort);
         leg.max_speed_radps = node.declare_parameter<std::vector<double>>("leg_max_speed_radps",     leg.max_speed_radps);
         leg.limit_lower     = node.declare_parameter<std::vector<double>>("leg_limit_lower",         leg.limit_lower);
@@ -147,6 +146,8 @@ struct ChassisConfiguration
         leg.joint_sign      = node.declare_parameter<std::vector<double>>("leg_joint_sign",          leg.joint_sign);
         leg.soft_limit_kp   = node.declare_parameter<std::vector<double>>("leg_soft_limit_kp",       leg.soft_limit_kp);
         leg.soft_limit_kd   = node.declare_parameter<std::vector<double>>("leg_soft_limit_kd",       leg.soft_limit_kd);
+        leg.joint_names     = node.declare_parameter<std::vector<std::string>>("leg_joint_names",    leg.joint_names);
+        leg.command_topics  = node.declare_parameter<std::vector<std::string>>("leg_command_topics", leg.command_topics);
         leg.effort_rate_limit = node.declare_parameter<std::vector<double>>("leg_effort_rate_limit", leg.effort_rate_limit);
         leg.soft_limit_margin = node.declare_parameter<std::vector<double>>("leg_soft_limit_margin", leg.soft_limit_margin);
 
@@ -154,11 +155,11 @@ struct ChassisConfiguration
         auto& height = result.height;
         height.link_length      = node.declare_parameter("leg_length",      height.link_length);
         height.link_angle       = node.declare_parameter("leg_angle",       height.link_angle);
-        height.target_height_m  = node.declare_parameter("target_height_m", height.target_height_m);
-        height.maximum_rate_mps = node.declare_parameter("height_rate_mps", height.maximum_rate_mps);
         height.rod_mass         = node.declare_parameter("leg_rod_mass",    height.rod_mass);
         height.joint_mass       = node.declare_parameter("leg_joint_mass",  height.joint_mass);
         height.wheel_mass       = node.declare_parameter("wheel_mass",      height.wheel_mass);
+        height.target_height_m  = node.declare_parameter("target_height_m", height.target_height_m);
+        height.maximum_rate_mps = node.declare_parameter("height_rate_mps", height.maximum_rate_mps);
 
         result.validate();
         return result;
@@ -229,7 +230,8 @@ struct ChassisConfiguration
         const double wheel_limit = control.max_effort + remote.max_differential;
 
         result.dt = control.dt;
-        result.effort_limit      = {wheel_limit, wheel_limit, leg.max_effort[0], leg.max_effort[1], leg.max_effort[2], leg.max_effort[3]};
+        result.effort_limit      = {wheel_limit,        wheel_limit,       leg.max_effort[0], 
+                                    leg.max_effort[1],  leg.max_effort[2], leg.max_effort[3]};
         result.effort_rate_limit = {control.wheel_effort_rate_limit, control.wheel_effort_rate_limit, leg.effort_rate_limit[0], 
                                     leg.effort_rate_limit[1],        leg.effort_rate_limit[2],        leg.effort_rate_limit[3]};
 
